@@ -2,24 +2,23 @@
 ======================================================
 
 
-Examples and users
-Read the Docs community for science is already big and keeps growing. The :external+jupyter:doc:`Jupyter Project <index>` itself and the many sub-projects of Jupyter are built and published with Read the Docs.
+单片机设计电子网
 
 .. grid:: 3
     :gutter: 2
     :padding: 0
 
-    .. grid-item-card:: github
-      :img-top: ../img/github_logo.png
-      :link: https://github.com/hello-liang-tao
+    .. grid-item-card:: B站
+      :img-top: ../img/bilibili.png
+      :link: https://space.bilibili.com/211802621/
 
-    .. grid-item-card:: Chainladder - Property and Casualty Loss Reserving in Python
-      :img-top: ../img/logo_chain_ladder.png
-      :link: https://chainladder-python.readthedocs.io/
+    .. grid-item-card:: B站
+      :img-top: ../img/bilibili.png
+      :link: https://space.bilibili.com/211802621/
 
-    .. grid-item-card:: Feature-engine - A Python library for Feature Engineering and Selection
-      :img-top: ../img/logo_feature_engine.png
-      :link: https://feature-engine.readthedocs.io/en/latest/
+    .. grid-item-card:: B站
+      :img-top: ../img/bilibili.png
+      :link: https://space.bilibili.com/211802621/
 
 .. toctree::
    :maxdepth: 2
