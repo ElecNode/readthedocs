@@ -1,0 +1,460 @@
+10.OpenWrt-防火墙规则
+===========================================================
+
+防火墙是OPenWrt非常重要的一部分,实际产品开发网络安全也十分的重视,基础篇只说防火墙的配置和一些常用的命令.
+
+10.1 防火墙配置文件
+-----------------------------------------------------------
+
+.. code-block:: console
+   :caption: 防火墙FIREWALL
+   :linenos:
+
+    root@Togetek:/# cat /etc/config/firewall
+    config defaults
+            option syn_flood        1
+            option input            REJECT
+            option output           ACCEPT
+            option forward          REJECT
+    # Uncomment this line to disable ipv6 rules
+    #       option disable_ipv6     1
+
+    config zone
+            option name             lan
+            list   network          'lan'
+            option input            ACCEPT
+            option output           ACCEPT
+            option forward          ACCEPT
+
+    config zone
+            option name             wan
+            list   network          'wan'
+            list   network          'wan6'
+            option input            ACCEPT
+            option output           ACCEPT
+            option forward          REJECT
+            option masq             1
+            option mtu_fix          1
+
+    config forwarding
+            option src              lan
+            option dest             wan
+
+    # We need to accept udp packets on port 68,
+    # see https://dev.openwrt.org/ticket/4108
+    config rule
+            option name             Allow-DHCP-Renew
+            option src              wan
+            option proto            udp
+            option dest_port        68
+            option target           ACCEPT
+            option family           ipv4
+
+    # Allow IPv4 ping
+    config rule
+            option name             Allow-Ping
+            option src              wan
+            option proto            icmp
+            option icmp_type        echo-request
+            option family           ipv4
+            option target           ACCEPT
+
+    config rule
+            option name             Allow-IGMP
+            option src              wan
+            option proto            igmp
+            option family           ipv4
+            option target           ACCEPT
+
+    # Allow DHCPv6 replies
+    # see https://github.com/openwrt/openwrt/issues/5066
+    config rule
+            option name             Allow-DHCPv6
+            option src              wan
+            option proto            udp
+            option dest_port        546
+            option family           ipv6
+            option target           ACCEPT
+
+    config rule
+            option name             Allow-MLD
+            option src              wan
+            option proto            icmp
+            option src_ip           fe80::/10
+            list icmp_type          '130/0'
+            list icmp_type          '131/0'
+            list icmp_type          '132/0'
+            list icmp_type          '143/0'
+            option family           ipv6
+            option target           ACCEPT
+
+    # Allow essential incoming IPv6 ICMP traffic
+    config rule
+            option name             Allow-ICMPv6-Input
+            option src              wan
+            option proto    icmp
+            list icmp_type          echo-request
+            list icmp_type          echo-reply
+            list icmp_type          destination-unreachable
+            list icmp_type          packet-too-big
+            list icmp_type          time-exceeded
+            list icmp_type          bad-header
+            list icmp_type          unknown-header-type
+            list icmp_type          router-solicitation
+            list icmp_type          neighbour-solicitation
+            list icmp_type          router-advertisement
+            list icmp_type          neighbour-advertisement
+            option limit            1000/sec
+            option family           ipv6
+            option target           ACCEPT
+
+    # Allow essential forwarded IPv6 ICMP traffic
+    config rule
+            option name             Allow-ICMPv6-Forward
+            option src              wan
+            option dest             *
+            option proto            icmp
+            list icmp_type          echo-request
+            list icmp_type          echo-reply
+            list icmp_type          destination-unreachable
+            list icmp_type          packet-too-big
+            list icmp_type          time-exceeded
+            list icmp_type          bad-header
+            list icmp_type          unknown-header-type
+            option limit            1000/sec
+            option family           ipv6
+            option target           ACCEPT
+
+    config rule
+            option name             Allow-IPSec-ESP
+            option src              wan
+            option dest             lan
+            option proto            esp
+            option target           ACCEPT
+
+    config rule
+            option name             Allow-ISAKMP
+            option src              wan
+            option dest             lan
+            option dest_port        500
+            option proto            udp
+            option target           ACCEPT
+
+    # allow interoperability with traceroute classic
+    # note that traceroute uses a fixed port range, and depends on getting
+    # back ICMP Unreachables.  if we're operating in DROP mode, it won't
+    # work so we explicitly REJECT packets on these ports.
+    config rule
+            option name             Support-UDP-Traceroute
+            option src              wan
+            option dest_port        33434:33689
+            option proto            udp
+            option family           ipv4
+            option target           REJECT
+            option enabled          false
+
+    # include a file with users custom iptables rules
+    config include
+            option path /etc/firewall.user
+
+
+    ### EXAMPLE CONFIG SECTIONS
+    # do not allow a specific ip to access wan
+    #config rule
+    #       option src              lan
+    #       option src_ip   192.168.45.2
+    #       option dest             wan
+    #       option proto    tcp
+    #       option target   REJECT
+
+    # block a specific mac on wan
+    #config rule
+    #       option dest             wan
+    #       option src_mac  00:11:22:33:44:66
+    #       option target   REJECT
+
+    # block incoming ICMP traffic on a zone
+    #config rule
+    #       option src              lan
+    #       option proto    ICMP
+    #       option target   DROP
+
+    # port redirect port coming in on wan to lan
+    #config redirect
+    #       option src                      wan
+    #       option src_dport        80
+    #       option dest                     lan
+    #       option dest_ip          192.168.16.235
+    #       option dest_port        80
+    #       option proto            tcp
+
+    # port redirect of remapped ssh port (22001) on wan
+    #config redirect
+    #       option src              wan
+    #       option src_dport        22001
+    #       option dest             lan
+    #       option dest_port        22
+    #       option proto            tcp
+
+    ### FULL CONFIG SECTIONS
+    #config rule
+    #       option src              lan
+    #       option src_ip   192.168.45.2
+    #       option src_mac  00:11:22:33:44:55
+    #       option src_port 80
+    #       option dest             wan
+    #       option dest_ip  194.25.2.129
+    #       option dest_port        120
+    #       option proto    tcp
+    #       option target   REJECT
+
+    #config redirect
+    #       option src              lan
+    #       option src_ip   192.168.45.2
+    #       option src_mac  00:11:22:33:44:55
+    #       option src_port         1024
+    #       option src_dport        80
+    #       option dest_ip  194.25.2.129
+    #       option dest_port        120
+    #       option proto    tcp
+
+10.1.1 默认配置section
+-----------------------------------------------------------
+
+.. code-block:: console
+   :caption: default段
+   :linenos:
+
+   config defaults
+        option syn_flood        1
+        option input            REJECT
+        option output           ACCEPT
+        option forward          REJECT
+        option disable_ipv6     1
+
+.. csv-table:: default段
+  :align: center
+  :header: 键, 含义, 值
+  :widths: 15, 40, 30
+
+   syn_flood ,      是否启用防洪水攻击 ,        可选:0--关闭,1--启用
+   input ,          输入策略 ,                 可选:ACCEPT--接受,REJECT--拒绝
+   output ,         输出策略 ,                 可选:ACCEPT--接受,REJECT--拒绝
+   forward ,        转发策略 ,                 可选:ACCEPT--拒绝,REJECT--拒绝
+   disable_ipv6 ,   是否禁用IPv6防火墙策略 ,    可选:1--禁用,0--启用
+
+.. code-block:: console
+   :caption: zone段
+   :linenos:
+
+   config zone
+        option name             wan
+        list   network          'wan'
+        list   network          'wan6'
+        option input            ACCEPT
+        option output           ACCEPT
+        option forward          REJECT
+        option masq             1
+        option mtu_fix          1
+
+.. csv-table:: zone段
+  :align: center
+  :header: 键, 含义, 值
+  :widths: 15, 40, 30
+
+   name ,    域名称
+   network , (列表)被绑定到此域的网络接口,比如 lan, wan, wan6 , 
+   input ,   输入策略                                       , 可选:ACCEPT--接受,REJECT--拒绝。
+   output ,  输出策略                                       , 可选:ACCEPT--接受,REJECT--拒绝。
+   forward , 转发策略                                       , 可选:ACCEPT--接受,REJECT--拒绝。
+   masq ,    是否设置传输伪装                               , 可选:1--是,0--否。如果是wan口,必须设置为1。
+   mtu_fix , 是否设置MTU的MSS钳制                           , 可选:1--是,0--否。如果是wan口,设置为1。
+
+.. code-block:: console
+   :caption: forwarding段
+   :linenos:
+
+   config forwarding
+        option src              lan
+        option dest             wan
+
+.. csv-table:: forwarding段
+  :align: center
+  :header: 键, 含义
+  :widths: 15, 40
+
+  src  , 转发来源域(一般为 lan域)
+  dest , 转发目的域(一般为wan域)
+
+.. code-block:: console
+   :caption: rule段
+   :linenos:
+
+    # We need to accept udp packets on port 68,
+    # see https://dev.openwrt.org/ticket/4108
+    config rule
+            option name             Allow-DHCP-Renew
+            option src              wan
+            option proto            udp
+            option dest_port        68
+            option target           ACCEPT
+            option family           ipv4
+
+    # Allow IPv4 ping
+    config rule
+            option name             Allow-Ping
+            option src              wan
+            option proto            icmp
+            option icmp_type        echo-request
+            option family           ipv4
+            option target           ACCEPT
+
+    config rule
+            option name             Allow-IGMP
+            option src              wan
+            option proto            igmp
+            option family           ipv4
+            option target           ACCEPT
+
+    # Allow DHCPv6 replies
+    # see https://github.com/openwrt/openwrt/issues/5066
+    config rule
+            option name             Allow-DHCPv6
+            option src              wan
+            option proto            udp
+            option dest_port        546
+            option family           ipv6
+            option target           ACCEPT
+
+    config rule
+            option name             Allow-MLD
+            option src              wan
+            option proto            icmp
+            option src_ip           fe80::/10
+            list icmp_type          '130/0'
+            list icmp_type          '131/0'
+            list icmp_type          '132/0'
+            list icmp_type          '143/0'
+            option family           ipv6
+            option target           ACCEPT
+
+    # Allow essential incoming IPv6 ICMP traffic
+    config rule
+            option name             Allow-ICMPv6-Input
+            option src              wan
+            option proto    icmp
+            list icmp_type          echo-request
+            list icmp_type          echo-reply
+            list icmp_type          destination-unreachable
+            list icmp_type          packet-too-big
+            list icmp_type          time-exceeded
+            list icmp_type          bad-header
+            list icmp_type          unknown-header-type
+            list icmp_type          router-solicitation
+            list icmp_type          neighbour-solicitation
+            list icmp_type          router-advertisement
+            list icmp_type          neighbour-advertisement
+            option limit            1000/sec
+            option family           ipv6
+            option target           ACCEPT
+
+    # Allow essential forwarded IPv6 ICMP traffic
+    config rule
+            option name             Allow-ICMPv6-Forward
+            option src              wan
+            option dest             *
+            option proto            icmp
+            list icmp_type          echo-request
+            list icmp_type          echo-reply
+            list icmp_type          destination-unreachable
+            list icmp_type          packet-too-big
+            list icmp_type          time-exceeded
+            list icmp_type          bad-header
+            list icmp_type          unknown-header-type
+            option limit            1000/sec
+            option family           ipv6
+            option target           ACCEPT
+
+    config rule
+            option name             Allow-IPSec-ESP
+            option src              wan
+            option dest             lan
+            option proto            esp
+            option target           ACCEPT
+
+    config rule
+            option name             Allow-ISAKMP
+            option src              wan
+            option dest             lan
+            option dest_port        500
+            option proto            udp
+            option target           ACCEPT
+
+    # allow interoperability with traceroute classic
+    # note that traceroute uses a fixed port range, and depends on getting
+    # back ICMP Unreachables.  if we're operating in DROP mode, it won't
+    # work so we explicitly REJECT packets on these ports.
+    config rule
+            option name             Support-UDP-Traceroute
+            option src              wan
+            option dest_port        33434:33689
+            option proto            udp
+            option family           ipv4
+            option target           REJECT
+            option enabled          false
+
+.. csv-table:: forwarding段
+  :align: center
+  :header: 键, 含义
+  :widths: 15, 40
+
+   src ,       数据包源地址所属域(zone)
+   src_ip ,    数据包源IP地址
+   sre_port ,  源地址端口号
+   dest ,      数据包目的地所属域(zone)
+   dest_ip ,   数据包目的地IP地址
+   dest_port , 目的地端口号
+   proto ,     数据包的协议类型
+   target ,    设置防火规则,可选:ACCEPT,REJECT,DROP,MARK,NOTRACK
+
+.. code-block:: console
+   :caption: SSH连接规则
+   :linenos:
+
+   config rule
+        option name Allow-wan-SSH
+        option src wan
+        option dest_port 22
+        option proto tcp
+        option target ACCEPT
+
+.. csv-table:: redirect段
+  :align: center
+  :header: 键, 含义
+  :widths: 15, 40
+
+   src ,      数据包源地址所属域(zone)
+   src_ip ,   数据包源IP地址
+   src_mac ,  数据包源MAC地址
+   src_port , 数据包源端口
+   proto ,    数据包的协议类型
+   dest ,     数据包目的地址所属域(zone)
+   dest_ip ,  数据包目的IP地址
+   dest_port ,数据包目的端口
+   dest_mac , 数据包目的MAC地址
+
+10.2 防火墙常用操作
+-----------------------------------------------------------
+
+.. code-block:: shell 
+   :caption: 防火墙
+   :linenos:
+
+   #阻止防火墙服务开机自动启动
+   /etc/init.d/firewall disable
+   #关闭防火墙
+   /etc/init.d/firewall stop
+   #开启防火墙
+   /etc/init.d/firewall start
+   #重启防火墙
+   /etc/init.d/firewall restart

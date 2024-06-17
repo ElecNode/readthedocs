@@ -1,0 +1,198 @@
+12.OpenWrt-uci命令接口
+===========================================================
+
+UCI(Unified Configuration Interface)即通用配置接口.uci是openwrt的核心模块之一,是用于管理openwrt系统的配置文件,提供了API库函数和命令行接口供用户调用,这些配置文件默认保存在/etc/config/目录下,每一个文件即是一个uci配置文件.
+
+12.1 uci命令介绍
+-----------------------------------------------------------
+
+.. code-block:: console 
+   :caption: wifi网络配置
+   :linenos:
+   
+   root@Togetek:/# cat /etc/config/wireless
+
+   config wifi-device 'radio0'
+         option type 'mac80211'
+         option path 'platform/10300000.wmac'
+         option channel '1'
+         option band '2g'
+         option htmode 'HT20'
+         option cell_density '0'
+
+   config wifi-iface 'default_radio0'
+         option device 'radio0'
+         option network 'lan'
+         option mode 'ap'
+         option ssid 'OpenWrt'
+         option encryption 'none'
+
+   config wifi-iface 'wifinet1'
+         option device 'radio0'
+         option mode 'sta'
+         option network 'wwan'
+         option ssid 'CHINE_PDCN'
+         option encryption 'psk2'
+         option key 'xlmqwa1006'
+
+UCI配置文件通常由一个或多个config语句组成:
+
+1. config后面的interface是一个config的type,由自己定义,可以重复出现.
+2. type后面是section,需要单引号括起,也由自己定义,在同一个文件中不可以重复出现,搜索该section下的配置时需要用到这个section名. 
+3. option一般放具体配置名,value是该配置对应的值,一般由单引号括起. 
+4. list是一个列表名,可以包含多个值. 
+
+12.2 uci命令使用
+-----------------------------------------------------------
+
+这里列出几个常用命令:
+uci commit、uci get、uci set、uci add_list、uci del_list、uci show
+
+以下为一个uci配置文件,文件名为test,放置路径为/etc/config/
+
+**uci get:获取uci配置**
+
+.. code-block:: console 
+   :caption: uci get使用
+   :linenos:
+
+   root@Togetek:/# uci get wireless.wifinet1.ssid
+   CHINE_PDCN
+   root@Togetek:/# uci get wireless.wifinet1.key
+   xlmqwa1006
+
+**uci set: 设置uci配置**
+
+.. code-block:: console 
+   :caption: uci set使用
+   :linenos:
+
+   root@Togetek:/# uci get wireless.wifinet1.key
+   xlmqwa1006
+   root@Togetek:/# uci set wireless.wifinet1.key='12345678'
+   root@Togetek:/# uci get wireless.wifinet1.key
+   12345678
+
+**uci add_list: 添加uci的指定的列表的值**
+
+.. code-block:: console 
+   :caption: uci add_list使用
+   :linenos:
+
+   root@Togetek:/# uci add_list wireless.wifinet1.others='home'
+   root@Togetek:/# uci add_list wireless.wifinet1.others='office'
+   root@Togetek:/# uci get  wireless.wifinet1.others
+   home office
+
+**uci del_list: 删除uci的指定的列表的某一值**
+
+.. code-block:: console 
+   :caption: uci del_list使用
+   :linenos:
+
+   root@Togetek:/# uci del_list wireless.wifinet1.others='office'
+   root@Togetek:/# uci get  wireless.wifinet1.others
+   home
+
+**uci show: 显示uci文件的配置**
+
+若只输入uci show,则会显示指定目录下的所有uci配置文件的配置,默认为/etc/config/下的uci文件,会显示出很多,一般不会这样查询.
+
+.. code-block:: console 
+   :caption: uci show使用
+   :linenos:
+   
+   # 1. /etc/config/wireless为上面列出的uci文件名,uci show wireless会显示出test文件里的所有配置信息
+   root@Togetek:/# uci show wireless
+   wireless.radio0=wifi-device
+   wireless.radio0.type='mac80211'
+   wireless.radio0.path='platform/10300000.wmac'
+   wireless.radio0.channel='1'
+   wireless.radio0.band='2g'
+   wireless.radio0.htmode='HT20'
+   wireless.radio0.cell_density='0'
+   wireless.default_radio0=wifi-iface
+   wireless.default_radio0.device='radio0'
+   wireless.default_radio0.network='lan'
+   wireless.default_radio0.mode='ap'
+   wireless.default_radio0.ssid='OpenWrt'
+   wireless.default_radio0.encryption='none'
+   wireless.wifinet1=wifi-iface
+   wireless.wifinet1.device='radio0'
+   wireless.wifinet1.mode='sta'
+   wireless.wifinet1.network='wwan'
+   wireless.wifinet1.ssid='CHINE_PDCN'
+   wireless.wifinet1.encryption='psk2'
+   wireless.wifinet1.key='xlmqwa1006'
+   wireless.wifinet1.others='home'
+
+   # 2.radio0为/etc/config/wireless文件里的一个section,该命令会显示该section下的所有配置信息
+   root@Togetek:/# uci show wireless.radio0
+   wireless.radio0=wifi-device
+   wireless.radio0.type='mac80211'
+   wireless.radio0.path='platform/10300000.wmac'
+   wireless.radio0.channel='1'
+   wireless.radio0.band='2g'
+   wireless.radio0.htmode='HT20'
+   wireless.radio0.cell_density='0'
+
+   # 3.ssid为/etc/config/wireless文件里default_radio0这个section里的一个option
+   root@Togetek:/# uci show wireless.default_radio0.ssid
+   wireless.default_radio0.ssid='OpenWrt'
+
+   # 4.others为/etc/config/wireless文件里wifinet1这个section里的一个list
+   root@Togetek:/# uci show wireless.wifinet1.others
+   wireless.wifinet1.others='home'
+
+   # 5.uci commit:提交uci配置的更改
+   # 在经过上面所有操作之后,uci show test为如下信息
+   root@Togetek:/# uci show wireless
+   wireless.radio0=wifi-device
+   wireless.radio0.type='mac80211'
+   wireless.radio0.path='platform/10300000.wmac'
+   wireless.radio0.channel='1'
+   wireless.radio0.band='2g'
+   wireless.radio0.htmode='HT20'
+   wireless.radio0.cell_density='0'
+   wireless.default_radio0=wifi-iface
+   wireless.default_radio0.device='radio0'
+   wireless.default_radio0.network='lan'
+   wireless.default_radio0.mode='ap'
+   wireless.default_radio0.ssid='OpenWrt'
+   wireless.default_radio0.encryption='none'
+   wireless.wifinet1=wifi-iface
+   wireless.wifinet1.device='radio0'
+   wireless.wifinet1.mode='sta'
+   wireless.wifinet1.network='wwan'
+   wireless.wifinet1.ssid='CHINE_PDCN'
+   wireless.wifinet1.encryption='psk2'
+   wireless.wifinet1.key='xlmqwa1006'
+   wireless.wifinet1.others='home'
+
+   # 但打开test文件,test文件内容如下
+   root@Togetek:/# cat /etc/config/wireless
+
+   config wifi-device 'radio0'
+         option type 'mac80211'
+         option path 'platform/10300000.wmac'
+         option channel '1'
+         option band '2g'
+         option htmode 'HT20'
+         option cell_density '0'
+
+   config wifi-iface 'default_radio0'
+         option device 'radio0'
+         option network 'lan'
+         option mode 'ap'
+         option ssid 'OpenWrt'
+         option encryption 'none'
+
+   config wifi-iface 'wifinet1'
+         option device 'radio0'
+         option mode 'sta'
+         option network 'wwan'
+         option ssid 'CHINE_PDCN'
+         option encryption 'psk2'
+         option key 'xlmqwa1006'
+
+经过上述的修改操作后,命令行显示出/etc/config/wireless文件的配置是修改后的配置,但/etc/config/wireless文件本身是没有被修改的若要让命令行的修改操作生效,则在修改完后需要执行 ``uci commit`` 命令,才会将修改的内容同步到/etc/config/wireless文件.

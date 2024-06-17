@@ -1,0 +1,93 @@
+11.OpenWrt-flash分区结构
+===========================================================
+
+11.1 flash分区
+-----------------------------------------------------------
+
+OpenWrt开发板使用16M的flash作为存储设备,系统将flash分为4个主要分区,分别是 ``u-boot``、 ``u-boot-env``、 ``factory``、 ``firmware``.
+
+u-boot:存放系统引导uboot固件
+u-boot-env:存放uboot中设置的环境变量
+factory:存放有线网络、wifi的mac地址和wifi射频校准数据.
+firmware:细分kernel和rootfs两个分区,kernel即linux系统,由于OpenWrt是使用buildroot构建的根文件系统,这里rootfs就是buildroot文件系统.
+
+其中rootfs划分了一部分分区作为rootfs_data,在rootfs中包含了集成的常用的软件以及配置文件等,划分的rootfs_data可以用来存放用户数据.
+
+.. code-block:: console
+   :caption: flash分区结构
+   :linenos:
+
+   [    0.680405] Creating 4 MTD partitions on "spi0.0":
+   [    0.689942] 0x000000000000-0x000000030000 : "u-boot"
+   [    0.702696] 0x000000030000-0x000000040000 : "u-boot-env"
+   [    0.714684] 0x000000040000-0x000000050000 : "factory"
+   [    0.727803] 0x000000050000-0x000001000000 : "firmware"
+   [    0.739537] 2 uimage-fw partitions found on MTD device firmware
+   [    0.751364] Creating 2 MTD partitions on "firmware":
+   [    0.761215] 0x000000000000-0x00000021f407 : "kernel"
+   [    0.771050] mtd: partition "kernel" doesn't end on an erase/write block -- force read-only
+   [    0.790570] 0x00000021f407-0x000000fb0000 : "rootfs"
+   [    0.800484] mtd: partition "rootfs" doesn't start on an erase/write block boundary -- force read-only
+   [    0.819961] mtd: device 5 (rootfs) set to be root filesystem
+   [    0.832363] 1 squashfs-split partitions found on MTD device rootfs
+   [    0.844708] 0x0000007b0000-0x000000fb0000 : "rootfs_data"
+
+
+.. code-block:: console 
+   :caption: flash分区结构
+   :linenos:
+
+   root@Togetek:/# cat /proc/mtd
+   dev:    size   erasesize  name
+   mtd0: 00030000 00010000 "u-boot"
+   mtd1: 00010000 00010000 "u-boot-env"
+   mtd2: 00010000 00010000 "factory"
+   mtd3: 00fb0000 00010000 "firmware"
+   mtd4: 0021f407 00010000 "kernel"
+   mtd5: 00d90bf9 00010000 "rootfs"
+   mtd6: 00800000 00010000 "rootfs_data"
+
+11.2 overlay机制
+-----------------------------------------------------------
+
+手机使用久了会变卡,通过恢复出厂设置的方式可以让手机系统像新的一样.OpenWrt中也是用了这种overlay机制,在忘记路由器的密码时候使用卡针按下reset按钮数秒后,路由器恢复出厂设置,可以重新设置路由器.
+
+
+前面说了在rootfs分区中会划分一部分作为rootfs_data,这部分保存用户自己安装的软件以及文件,另外的一部分作为rootfs_rom.
+
+1. rootfs_rom是一个只读的分区,内核rootfs_rom分区完成系统的启动.
+2. rootfs_rom待系统加载完成后挂载到/rom目录下.
+3. 系统将rootfs_data格式化为可读写的文件分区,并将这个分区挂载到/overlay目录
+4. 将内存的部分挂载到/tmp目录.
+
+.. note::
+
+   在使用sysupgrade命令升级的时候将固件拷贝到/tmp目录,以使用的OpenWrt开发板为例配置16M flash,64M 内存.系统实际可用的flash容量比如为5M,而固件的大小为8M,flash是放不下固件.从64M的内存中分配部分挂载到/tmp目录,来存放固件,这样就可以升级了.
+   
+.. code-block:: console
+   :caption: overlay机制
+   :linenos:
+
+   root@Togetek:/# df -h
+   Filesystem                Size      Used Available Use% Mounted on
+   /dev/root                 5.8M      5.8M         0 100% /rom
+   tmpfs                    28.1M    228.0K     27.8M   1% /tmp
+   /dev/mtdblock6            8.0M    372.0K      7.6M   5% /overlay
+   overlayfs:/overlay        8.0M    372.0K      7.6M   5% /
+   tmpfs                   512.0K         0    512.0K   0% /dev
+   /dev/sda1                14.8G     40.8M     14.8G   0% /mnt/sda1
+
+.. code-block:: shell 
+   :caption: 根目录
+   :linenos:
+
+   root@Togetek:/# ls
+   bin      etc      lib      overlay  rom      sbin     tmp      var
+   dev      init     mnt      proc     root     sys      usr      www
+
+1. 看到的根目录是由rootfs_rom、rootfs_data构成(tmp不考虑).
+2. 对根目录的任何增加、修改、删除都保存在rootfs_data中记录.
+3. 需要使用根目录文件时,会读取rootfs_rom和rootfs_data中的记录,给出最终的结果.
+4. 如果需要恢复出厂设置只需要删除/overlay目录下的修改就可以.
+
+

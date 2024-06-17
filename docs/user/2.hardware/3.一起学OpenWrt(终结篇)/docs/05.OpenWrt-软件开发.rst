@@ -1,0 +1,582 @@
+05.OpenWrt-软件开发
+===========================================================
+
+OpenWrt提供了一个很好的机制来方便用户扩充和实现自己的功能.本章首先以dnsmasq为例介绍了OpenWrt构建系统,接着给出了一个HelloWorld的简易模板供增加软件模块时快速借鉴使用,然后讲述了OpenWrt的软件启动机制,最后介绍了补丁文件的格式以及补丁工具的使用.
+
+5.1 编译构建系统
+-----------------------------------------------------------
+
+5.1.1 概述
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+OpenWrt有一个非常好的构建系统,这样我们就可以非常方便地管理数千个软件包和几十个硬件平台.我们也可以非常方便地移植已有的软件到OpenWrt系统中.如果你看到OpenWrt的典型软件包目录,你会发现目录下一般会有两个文件夹和一个Makefile文件,以dnsmasq软件为例会有以下文件和目录.
+
+- dnsmasq/Makefile.
+- dnsmasq/files.
+- dnsmasq/patches.
+
+补丁(patches)目录是可选的,典型包含缺陷修改或者用于优化可执行程序大小的补丁文件.files目录也是可选的,它一般用于保存默认配置文件和初始化启动脚本.如果为OpenWrt本身项目所包含的软件模块,因为代码将完全受到自己控制,这时将不会有patches目录存在,而是会有一个src目录,代码直接放在src目录下.5.2节的HelloWorld就将源代码放在了src目录下.Makefile提供下载、编译、安装以及生成OPKG安装包的功能,这个文件是必须有的.
+
+如示例5-1所示,从文件的内容上,你很难看出它是一个Makefile文件——和通常的Makefile不同,OpenWrt没有遵守传统的Makefile格式风格,而是将Makefile写成面向对象格式,这样就简化了多平台移植过程.
+示例5-1:dnsmasq/Makefile内容.
+
+#
+#Copyright(C)2006-2015OpenWrt.org
+#
+#Thisisfreesoftware,licensedundertheGNUGeneralPublicLicensev2.
+#See/LICENSEformoreinformation.
+#
+
+include$(TOPDIR)/rules.mk
+PKG_NAME:=dnsmasq
+PKG_VERSION:=2.73
+PKG_RELEASE:=1
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.xz
+PKG_SOURCE_URL:=http://thekelleys.org.uk/dnsmasq
+PKG_MD5SUM:=b8bfe96d22945c8cf4466826ba9b21bd
+PKG_LICENSE:=GPL-2.0
+PKG_LICENSE_FILES:=COPYING
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(BUILD_VARIANT)/$(PKG_NAME)
+-$(PKG_VERSION)
+PKG_INSTALL:=1
+PKG_BUILD_PARALLEL:=1
+
+PKG_CONFIG_DEPENDS:=CONFIG_PACKAGE_dnsmasq_$(BUILD_VARIANT)_dhcpv6\
+CONFIG_PACKAGE_dnsmasq_$(BUILD_VARIANT)_dnssec\
+CONFIG_PACKAGE_dnsmasq_$(BUILD_VARIANT)_auth\
+CONFIG_PACKAGE_dnsmasq_$(BUILD_VARIANT)_ipset
+include$(INCLUDE_DIR)/package.mk
+definePackage/dnsmasq/Default
+SECTION:=net
+CATEGORY:=Basesystem
+TITLE:=DNSandDHCPserver
+URL:=http://www.thekelleys.org.uk/dnsmasq/
+endef
+definePackage/dnsmasq
+$(callPackage/dnsmasq/Default)
+VARIANT:=nodhcpv6
+endef
+definePackage/dnsmasq-dhcpv6
+$(callPackage/dnsmasq/Default)
+TITLE+=(withDHCPv6support)
+DEPENDS:=@IPV6+kmod-ipv6
+VARIANT:=dhcpv6
+endef
+definePackage/dnsmasq-full
+$(callPackage/dnsmasq/Default)
+TITLE+=(withDNSSEC,DHCPv6,AuthDNS,IPsetenabledbydefault)
+DEPENDS:=+PACKAGE_dnsmasq_full_dnssec:libnettle\
++PACKAGE_dnsmasq_full_dhcpv6:kmod-ipv6\
++PACKAGE_dnsmasq_full_ipset:kmod-ipt-ipset
+VARIANT:=full
+endef
+
+
+definePackage/dnsmasq/description
+ItisintendedtoprovidecoupledDNSandDHCPservicetoaLAN.
+endef
+definePackage/dnsmasq-dhcpv6/description
+$(callPackage/dnsmasq/description)
+ThisisavariantwithDHCPv6support
+endef
+definePackage/dnsmasq-full/description
+$(callPackage/dnsmasq/description)
+ThisisafullyconfigurablevariantwithDHCPv6,DNSSEC,Authroitative
+DNSand
+IPsetsupportenabledbydefault.
+endef
+definePackage/dnsmasq/conffiles
+/etc/config/dhcp
+/etc/dnsmasq.conf
+endef
+definePackage/dnsmasq-full/config
+ifPACKAGE_dnsmasq-full
+configPACKAGE_dnsmasq_full_dhcpv6
+bool"BuildwithDHCPv6support."
+dependsonIPV6
+defaulty
+configPACKAGE_dnsmasq_full_dnssec
+bool"BuildwithDNSSECsupport."
+defaulty
+configPACKAGE_dnsmasq_full_auth
+5.1编译构建系统83
+bool"Buildwiththefacilitytoactasanauthoritative
+DNSserver."
+defaulty
+configPACKAGE_dnsmasq_full_ipset
+bool"BuildwithIPsetsupport."
+defaulty
+endif
+endef
+Package/dnsmasq-dhcpv6/conffiles=$(Package/dnsmasq/conffiles)
+Package/dnsmasq-full/conffiles=$(Package/dnsmasq/conffiles)
+TARGET_CFLAGS+=-ffunction-sections-fdata-sections
+TARGET_LDFLAGS+=-Wl,--gc-sections
+COPTS=$(if$(CONFIG_IPV6),,-DNO_IPV6)
+ifeq($(BUILD_VARIANT),nodhcpv6)
+COPTS+=-DNO_DHCP6
+endif
+ifeq($(BUILD_VARIANT),full)
+COPTS+=$(if$(CONFIG_PACKAGE_dnsmasq_$(BUILD_VARIANT)_dhcpv6),,
+-DNO_DHCP6)\
+$(if$(CONFIG_PACKAGE_dnsmasq_$(BUILD_VARIANT)_dnssec),
+-DHAVE_DNSSEC)\
+$(if$(CONFIG_PACKAGE_dnsmasq_$(BUILD_VARIANT)_auth),,
+-DNO_AUTH)\
+$(if$(CONFIG_PACKAGE_dnsmasq_$(BUILD_VARIANT)_ipset),,
+-DNO_IPSET)
+COPTS+=$(if$(CONFIG_LIBNETTLE_MINI),-DNO_GMP,)
+else
+COPTS+=-DNO_AUTH-DNO_IPSET
+endif
+
+
+
+MAKE_FLAGS:=\
+$(TARGET_CONFIGURE_OPTS)\
+CFLAGS="$(TARGET_CFLAGS)"\
+LDFLAGS="$(TARGET_LDFLAGS)"\
+COPTS="$(COPTS)"\
+PREFIX="/usr"
+definePackage/dnsmasq/install
+$(INSTALL_DIR)$(1)/usr/sbin
+$(CP)$(PKG_INSTALL_DIR)/usr/sbin/dnsmasq$(1)/usr/sbin/
+$(INSTALL_DIR)$(1)/etc/config
+$(INSTALL_DATA)./files/dhcp.conf$(1)/etc/config/dhcp
+$(INSTALL_DATA)./files/dnsmasq.conf$(1)/etc/dnsmasq.conf
+$(INSTALL_DIR)$(1)/etc/init.d
+$(INSTALL_BIN)./files/dnsmasq.init$(1)/etc/init.d/dnsmasq
+$(INSTALL_DIR)$(1)/etc/hotplug.d/iface
+$(INSTALL_DATA)./files/dnsmasq.hotplug$(1)/etc/hotplug.d/
+iface/25-dnsmasq
+endef
+Package/dnsmasq-dhcpv6/install=$(Package/dnsmasq/install)
+definePackage/dnsmasq-full/install
+$(callPackage/dnsmasq/install,$(1))
+ifneq($(CONFIG_PACKAGE_dnsmasq_full_dnssec),)
+$(INSTALL_DIR)$(1)/usr/share/dnsmasq
+$(INSTALL_DATA)$(PKG_BUILD_DIR)/trust-anchors.conf$(1)/
+usr/share/dnsmasq
+endif
+endef
+$(eval$(callBuildPackage,dnsmasq))
+$(eval$(callBuildPackage,dnsmasq-dhcpv6))
+$(eval$(callBuildPackage,dnsmasq-full))
+
+
+示例5-1首先是使用“include”指示符来包含顶层目录的rules.mk文件.接着是变量定义,它定义了软件包的基本信息,如名称、版本、下载地址、许可协议和编译目录等信息.在“PKG_*”变量定义完成之后再包含package.mk文件.中间部分是软件包的宏定义和一些编译选项定义.最后是调用BuildPackage.示例5-1中的Makefile没有太多其他逻辑依赖的工作需要去做,所有的一切都是隐藏在被包含的Makefile(include/package.mk及rules.mk)中的.Makefile文件非常抽象,你只需要按照通用的模板定义变量即可.make程序在处理指示符“include”时,将暂停对当前Makefile文件的读取,而转去依次读取由“include”指示符指定的文件.直到完成所有这些包含文件后再回过头继续读取指示符“include”所在的Makefile文件.rules.mk文件是全局的编译变量定义,在每一个软件包的Makefile文件的第一行均首先包含这个文件.rules.mk文件中经常使用的变量定义有以下几个.
+
+- INCLUDE_DIR源代码目录下的include目录.
+- BUILD_DIR代码编译的根目录,通常为“build_dir/target-*”目录.
+- TARGET_CFLAGS指定目标平台的C语言编译选项.
+- TARGET_LDFLAGS指定目标平台的编译链接选项.
+- INSTALL_DIR创建目录,并设置目录权限.
+- INSTALL_DATA安装数据文件,即复制并设置权限为0644.
+- INSTALL_CONF安装配置文件,即复制并设置权限为0600.
+- INSTALL_BIN安装可执行程序,即复制并增加执行权限,设置权限表示为0777.
+
+5.1.2变量定义
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+OpenWrt预定义了很多变量,这些变量减少了使用者的开发代价,但需要使用者按照
+语义进行使用.
+
+.. csv-table:: Makefile的常见变量含义
+  :align: center
+  :header: 变量,含义,示例
+  :widths: 15,30,30
+
+
+	PKG_NAME , 软件包的名称,可以通过menuconfig和ipkg查看到 , dnsmasq
+	PKG_VERSION上 , 游软件的版本号,为2.73 , 2.73
+	PKG_RELEASE , Makefile的版本号 , 1
+	PKG_SOURCE , 原始的源代码文件名 ,  
+	PKG_SOURCE_URL , 用于下载源码的地址(目录) , http://thekelleys.org.uk/dnsmasq
+	PKG_MD5SUM , 软件包的MD5值,用于验证下载的文件是否正确 , b8bfe96d22945c8cf4466826ba9b21bd
+	PKG_LICENSE , 这个软件的许可协议,开源软件的许可证以GPL家族最多 , GPL-2.0
+	PKG_LICENSE_FILES , 许可协议文件,是指代码目录下的文件名,一般均为COPYING , COPYING
+	PKG_BUILD_DIR , 软件包的编译目录 ,  
+	PKG_INSTALL , 设置为1将调用软件包自己的“makeinstall”,安装目录前缀为PKG_INSTALL_DIR , 1
+	PKG_BUILD_PARALLEL , 是否可以并行编译 , 1
+	PKG_CONFIG_DEPENDS , 编译依赖,指定哪些选项依赖本软件包 ,  
+	PKG_INSTALL_DIR , 当调用原始软件包“makeinstall”时的安装目录 ,  
+	PKG_SOURCE_PROTO , 用于下载的传输协议(git、svn),如果为压缩包则不用指定 ,  
+	PKG_SOURCE_SUBDIR , 下载目录,如果下载传输协议为“svn”或“git”时必须指定.例如:"PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)" ,  
+	PKG_SOURCE_VERSION , 下载协议为“git”时必须指定,指定的提交哈希点将会被检出 ,  
+	PKG_MAINTAINER , 维护者的姓名和邮件地址 ,  
+	PKG_BUILD_DEPENDS , 软件包编译依赖,即在这个包编译之前编译,但是在运行时不需要,和DEPENDS有相同的语法 ,  
+
+
+“BuildPackage”是在包含头文件“include/package.mk”中定义的.BuildPackage仅仅需要一个直接参数——要编译的软件包名称.在这个例子中传递了3个软件包名称作为参数,分别为dnsmasq、dnsmasq-dhcpv6和dnsmasq-full.所有其他信息都是从上面的变量定义和宏定义块中获取的.
+
+5.1.3 软件包定义
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+一些宏定义以“Package/”开头,Package开头的定义用于“makemenuconfig”选择及编译生成软件包.另外一些宏定义为“Build/”开头,这些用于代码编译.OpenWrt的每一个软件代码包只有一个Makefile文件.通常编译过程都是一样的,只是中间的编译参数有所不同,因此只有一个全局“Build”定义.但你可以将一个源代码包分割为多个安装包.你可以增加许多软件安装包“Package/”定义来多次调用BuildPackage,这样就可以从单个源代码编译出来多个软件安装包.dnsmasq软件就定义了3种软件安装包,即dnsmasq、dnsmasq-dhcpv6和dnsmasq-full.软件包定义用于编译前的软件包选择和编译后的IPKG安装包生成.这些设置的参数传递给buildroot进行交叉编译,buildroot是交叉编译环境的统称.这些是在menuconfig和生成的IPKG安装包实体中显示的.在软件包“Package/”定义下你需要给下列变量赋值.
+
+软件包Package选项见表5-2.
+- SECTION:软件包的类型,如network、Sound、Utilities或Multimedia等.
+- CATEGORY:在menuconfig中显示到菜单分类中.
+- TITLE:标题,是软件包的简短描述.
+- URL:软件包的原始网站地址,可以在这里找到该软件.
+- MAINTAINER:维护者的姓名和邮件地址.一般为这个软件包作者的邮件地址.
+- DEPENDS:(可选)依赖项,需要在本软件包之前编译和安装的软件包.
+
+表5-2软件包Package选项
+安装包选项是否必需含义
+Package/<>是定义软件包的描述信息,例如网站地址和menuconfig中的菜单分类等
+Package/<>/Default可选软件包的默认选项
+Package/<>/description是软件包的详细描述
+Package/<>/install是
+复制文件到ipkg目录中,使用$(1)代表ipkg的目录,在源代码中使
+用相对目录.编译生成的安装文件由$(PKG_INSTALL_DIR)目录下
+复制到ipkg的目录下
+Package/<>/config可选根据软件包的选择对编译选项进行定义
+
+
+安装包选项是否必需含义
+Package/<>/conffiles可选定义本软件包的运行配置文件列表,一行一个文件
+Package/<>/preinst可选这是在安装之前实际执行的脚本,不要忘了包含#!/bin/sh.如果你需要中止安装就返回false
+Package/<>/postinst可选在安装完成后执行的脚本,例如启动程序.不要忘了包含
+#!/bin/sh
+Package/<>/prerm可选在删除之前执行的脚本,例如停止程序的执行.不要忘了包含
+#!/bin/sh.如果需要中止删除就返回false
+Package/<>/postrm可选在删除之后执行的脚本,不要忘了包含#!/bin/sh.如果需要中止删除就返回false
+注意,在模块移植时请将<>替换为你自己的软件包名称.
+
+5.1.4构建
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+这是软件包模块的编译步骤,通常包含准备(Prepare)、配置(Configure)、编译(Compile)和安装(Install)等4步.这部分在构建时都是可选的,因为OpenWrt已经制作了通用的模板,适合大多数模块来编译使用.dnsmasq软件就是采用默认的步骤,但指定了编译选项,例如设置MAKE_FLAGS变量指定编译选项,CONFIGURE_ARGS变量用于指定配置选项.这些变量都在“package-defaults.mk”文件中定义,我们可以在软件包的
+Makefile中修改它,构建步骤如表5-3所示.
+
+表5-3软件包构建步骤
+Build步骤是否必需含义Build/Prepare可选一组用于解包及打补丁的命令,也可以不使用Build/Configure可选如果源代码不需要configure来生成Makefile或者是通用的configure脚本,
+就不需要这部分.否则就需要你自己的命令脚本或者使用"$(call Build/Configure/Default,FOO=bar)"增加额外的参数传递给configure脚本
+Build/Compile可选编译源代码,在大多数情况下应该不用定义而使用默认值.如果你想传递给
+make特定的参数,可以使用“$(callBuild/Compile/Default,FOO=bar)”
+Build/Install可选安装编译后的文件,默认是调用makeinstall,如果需要传递指定的参数,使用$(callBuild/Install/Default,installinstall-foo).注意你需要传递所有的参数,要增加在“install”参数后面,不要忘了“install”参数Build/InstallDev可选例如静态库和头文件等,但是不需要在目标设备上使用
+
+在dnsmasq模块中并没有对Build进行定义,如果在模块移植中需要对Build进行定
+义,请参考iproute2模块定义(package/network/utils/iproute2/Makefile).
+
+5.2 HelloWorld
+-----------------------------------------------------------
+
+任何一门编程语言都有一个入门HelloWorld程序,本书也提供了一个HelloWorld程序供路由器开发入门使用.我们实现一个在路由器启动后访问指定网站的功能,这样就可以统计路由器的启动次数.网站地址可以在配置文件中进行自定义配置,这个网址通过UCI编程接口读取配置文件来实现.访问指定网站功能通过命令行工具wget来实现.但如果其他人也使用wget来访问服务器,这样就不能区分是路由器行为还是其他应用软件
+的行为,因此我们修改了代理字符串来作为我们的自定义字符串,这样就可以和默认的访问行为区分开来.为了防止某些小区在断电并自动启动后,均立即访问服务器,对服务器产生瞬间流量冲击,因此路由器启动后产生一个随机延迟时间,然后再访问服务器.这个时间可以通过配置文件设置,假如设置为100秒,则访问服务器时间就为1~100秒的随机值.代码实现如示例5-2所示.
+示例5-2:
+
+.. code-block:: c
+   :caption: scanf函数用法
+   :linenos:
+
+	//Copyright(C)2015zhangyongzhi
+	#include<stdlib.h>
+	#include<stdio.h>
+	#include<unistd.h>
+	#include<string.h>
+	#include"uci.h"
+	//根据选项来访问服务器.
+	structHello
+	{
+		charagent[50];//代理字符串.
+		charurl[256];//访问的url.
+		intdelay;//启动后延迟多长时间访问.
+	};
+	intgetValue(structuci_context*ctx,char*key,char*value,intn)
+	{
+		charstrKey[100];
+		structuci_ptrptr;
+		snprintf(strKey,sizeof(strKey),"hello.globe.%s",key);
+		if(uci_lookup_ptr(ctx,&ptr,strKey,true)==UCI_OK)
+		{
+			printf("%s\n",ptr.o->v.string);
+			strncpy(value,ptr.o->v.string,n-1);
+		}
+		return0;
+	}
+	intread_conf(structHello*hello)
+	{
+		structuci_context*ctx=uci_alloc_context();
+		if(!ctx)
+		{
+			fprintf(stderr,"Nomemory\n");
+			return1;
+		}
+		getValue(ctx,"agent",hello->agent,sizeof(hello->agent));
+		getValue(ctx,"url",hello->url,sizeof(hello->url));
+		chardelay[20];
+		getValue(ctx,"delay",delay,sizeof(delay));
+		hello->delay=atoi(delay);
+		uci_free_context(ctx);
+		return0;
+	}
+
+	struct Hello hello;
+	int main(int argc,char* argv[])
+	{
+		/*
+		charagent[50]="openwrt";
+		charurl[100]="http://bjbook.net/bk/openwrt";
+		*/
+		//从/etc/config/hello中读取参数
+		read_conf(&hello);
+		printf("agent=%s\n",hello.agent);
+		printf("url=%s\n",hello.url);
+		printf("delay=%d\n",hello.delay);
+		charcmd[512]={0};
+		snprintf(cmd,sizeof(cmd),"wget--user-agent=%s%s",hello.agent,hello.url);
+		//system("wget--user-agent=agent-stringhttp://bjbook.net/bk/openwrt");
+		printf("cmd=%s\n",cmd);
+		//srand(time(NULL));
+		intdelay_time=rand()%hello.delay;
+		printf("delay_time=%d\n",delay_time);
+		sleep(delay_time);
+		system(cmd);
+		return0;
+	}
+
+5.2.1目录结构
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+我们创建的目录结构如示例5-3所示.files目录包含配置文件和初始化脚本,hello.conf为配置文件,在安装后放在/etc/config/目录下的hello文件中.hello.init用于控制进程启动的初始化脚本.
+示例5-3:
+.|
+--files
+||--hello.conf
+|`--hello.init
+|--Makefile
+`--src
+|--hello.c
+`--Makefile
+
+Makefile包含编译及安装指令,控制着代码在OpenWrt环境下的编译和生成安装包.和通常的Makefile不太一样,我们的Makefile像是变量定义及函数,因为我们在OpenWrt工程下编译,这样在针对多平台时是最方便的.src目录保存C语言源代码,我们是自己开发的源代码,因此代码放在src目录下.
+
+5.2.2 Makefile
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+在package目录下增加一个模块目录hello,然后通过Makefile来控制编译.示例5-4所示为helloworld模块的Makefile.
+示例5-4:
+include$(TOPDIR)/rules.mk
+PKG_NAME:=hello
+PKG_RELEASE:=1.0
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)
+PKG_CONFIG_DEPENDS:=
+include$(INCLUDE_DIR)/package.mk
+definePackage/hello
+5.2HelloWorld93
+SECTION:=net
+CATEGORY:=Network
+TITLE:=Helloutility
+DEPENDS:=+libuci
+URL:=httt://bjbook.net/openwrt
+MAINTAINER:=zhang<zyz323@163.com>
+endef
+definePackage/hello/description
+ThisisRouteHelloWorldOpenWrt.
+endef
+defineBuild/Prepare
+mkdir-p$(PKG_BUILD_DIR)
+$(CP)./src/*$(PKG_BUILD_DIR)/
+endef
+definePackage/hello/install
+$(INSTALL_DIR)$(1)/etc/config
+$(INSTALL_CONF)./files/hello.conf$(1)/etc/config/hello
+$(INSTALL_DIR)$(1)/etc/init.d
+$(INSTALL_BIN)./files/hello.init$(1)/etc/init.d/hello
+$(INSTALL_DIR)$(1)/usr/sbin
+$(INSTALL_BIN)$(PKG_BUILD_DIR)/hello$(1)/usr/sbin/hello
+endef
+$(eval$(callBuildPackage,hello))
+
+示例5-4首先包含rules.mk文件,接着将软件包名称定义为“hello”,并设置版本编号为“1.0”,这样编译出来的软件包将包含字符串“hello_1.0”.在软件包定义中,我们设置软件包分类为“Network”.我们在编译前进行配置时,可以在网络分类中找到它.我们设置依赖变量DEPENDS为“+libuci”,因为我们的C语言代码里面调用了UCI的接口函数,否则我们在编译时会遇到“libuci.so”找不到类似的错误信息.依赖是指哪些包必须在这个软件包之前编译和安装.注意,是使用+包名称,“+libuci”表示如果选择
+本软件包时,libuci软件包也会被自动选择.
+“Build/Prepare”定义了如何准备编译本软件包,这里创建了编译目录,然后将代码复制到编译目录下.
+“Package/hello/install”定义了如何安装本软件包.共有3个文件需要安装,这里创建了3个目录,然后将3个文件分别复制到各自的目录下.首先将配置文件“hello.conf”复制到配置目录“/etc/config”下,并重命名为hello.接着将启动脚本“hello.init”复制到启动目录“/etc/init.d”下,并重命名为hello,最后将编译生成的可执行程序hello复制到“/usr/sbin”目录下.$(1)表示传入的第一个参数,在安装时,通常为根目录.通常新增一个模块的主要步骤如下.
+(1)在package下增加一个目录(例如hello).
+(2)添加src目录和files目录.
+(3)src目录存放模块源码.
+(4)files存放模块的配置文件及启动脚本等.
+(5)在hello下增加Makefile.在Makefile中增加编译脚本和安装脚本.
+例如:某公司想了解已售出路由器的使用情况,如路由器的启动次数.我们在每次启
+动时将访问指定服务器.Agent为第一次启动时生成的随机数和指定的代理固定字符串组
+合.这样简单修改示例代码的配置文件即可实现.大多数服务器已有记录访问日志功能,
+只需统计服务器的访问日志即可实现路由器启动次数的统计.
+
+5.2.3 编译
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+OpenWrt支持编译单个软件包,这样可以非常方便地编译单个软件包来定位问题.输
+入以下命令进行编译:
+makepackage/hello/build
+输入以下命令生成安装包:
+makepackage/hello/install
+
+快速重新进行整个编译过程.这样依次调用clean、compile和install.另外不管软件
+包的位置在什么地方,都是同样的编译命令.
+makepackage/hello/{clean,compile,install}
+编译完成,生成安装文件为bin/x86/packages/helloroute_1.0_x86.ipk.
+如果我们要加入平台编译过程中,可以在makemenuconfig时选择hello模块,再在隐
+藏的配置文件“.config”中会增加一项“CONFIG_PACKAGE_hello=y”,这样就可以在编
+译整个系统时自动编译生成我们的软件模块.
+如果遇到编译错误,使用makeV=s即可看到详细的编译过程和错误信息.
+配置文件的格式在4.1.2节中定义,我们这里只使用C语言程序调用UCI库来获取配置.
+特别注意:
+如果运行时遇到libc找不到的错误,是因为编译时的Makefile编写不正确,使用了宿
+主机的编译指令导致使用宿主机的libc.so.6动态链接库.
+
+5.3软件启动机制
+-----------------------------------------------------------
+
+init进程是所有系统进程的父进程,它被内核调用起来并负责调用所有其他的进程.
+如果任何进程的父进程退出,init进程将成为它的父进程.但是init进程是如何将其他进
+程调用起来的呢?
+内核启动完成后读取/etc/inittab文件,然后执行inittab中的sysinit所指的脚本.
+OpenWrt的inittab文件内容如下:
+::sysinit:/etc/init.d/rcSSboot
+::shutdown:/etc/init.d/rcSKshutdown
+::askconsole:/bin/ash--login
+内核启动完成后首先调用“/etc/init.d/rcS”,然后再由rcS逐个启动各个软件进程.
+如果按照通常的简单做法,我们会将每一个待启动的程序启动命令按行放入rcS文件中,并顺序执行.这种实现方法在软件启动进程列表不变时工作得非常好,如果需要动态修改,则不容易以程序来控制.OpenWrt引入了一个便于控制的启动机制,这种机制是在/etc/rc.d目录下创建每个软件的软链接方式,由rcS脚本在该目录读取启动命令的软链接,然后启动软链接所指向的程序,由于每一个软链接均包含一个数字,这样就可以按照数字顺序读取并进行启动了.所有软件的启动脚本都放在/etc/init.d/目录下,如果需要随系统启动,将启动脚本链接到/etc/rc.d/S*下即可.系统启动时将执行/etc/init.d/rcS脚本,并传递两个参数S和boot.S表示软件启动模块,是和K(软件关闭)相对应的;boot则表示首次启动.rcS脚本通过run_scripts函数来启动软件,将每一个以/etc/rc.d/S开头的脚本按照数字顺序传递boot参数并调用.这些启动脚本通常包含start、stop和restart这3个函数.
+下面我们通过HelloWorld的初始化脚本来理解软件模块的启动脚本,启动文件是
+/etc/init.d/hello.文件内容如示例5-5所示.
+示例5-5:
+#!/bin/sh/etc/rc.common
+#helloscript
+#Copyright(C)zhangyzOpenWrt.org
+START=15
+STOP=85
+start(){
+echo"startHelloRoute!"
+hello
+}
+stop(){
+echo"stopHelloRoute!"
+#hello-t
+}
+
+EXTRA_COMMANDS="custom"
+EXTRA_HELP="customHelpforthecustomcommand"
+custom(){
+echo"customcommand"
+}这个初始化脚本是一个shell脚本,包含变量定义和函数定义.这个脚本没有解析自己的命令行参数,这是通过“/etc/rc.common”脚本回调来完成的.第一行是特殊的注释行,表示使用“/etc/rc.common”来提供一些基本函数,包含主函数及默认功能以及检查脚本执行等.脚本的执行顺序通过START和STOP变量来定义.改变之后再次运行/etc/init.d/hello enable才会再次生效.这将删除以前创建的启动链接,然后再根据新的变量定义创建链接.创建的启动链接保存在“/etc/rc.d”目录下.脚本中最重要的函数是start和stop,这两个函数决定如何启动和停止服务.最后是增加扩展命令custom,仅仅输出扩展命令信息,并没有实际功能.程序的执行流程由rc.common来控制,下面我们来分析一下rc.common以理解其功能.rc.common提供可利用的命令如表5-4所示.其中定义了start和stop函数,实现为空,供应用软件重新实现,相当于C++语言中的虚函数.enable、disable和enabled函数提供自启动状态的设置和查询.help函数提供命令帮助信息.
+表5-4rc.common函数含义
+函数含义
+start启动服务.相当于C++语言中的虚函数,通常情况下每一个服务均需重写该函数
+stop关闭服务.相当于C++语言中的虚函数,通常情况下每一个服务均需重写该函数
+restart重启服务.调用stop函数退出进程,然后再调用start函数启动进程
+reload重新读取配置,如果读取配置失败则调用restart函数重启进程
+enable打开服务自启动,即将启动脚本软链接文件放在/etc/rc.d目录下
+disable关闭服务自启动,删除在/etc/rc.d的软链接文件
+enabled提供服务自启动的状态查询
+boot调用start函数
+shutdown调用stop函数
+help输出帮助信息
+
+
+在这个例子中,这个命令在启动时取代start函数而执行boot函数,如果boot函数没有被重新定义,将执行rc.common中预定义的boot函数,boot函数再次调用start函数.
+如果你不带参数运行命令,将会自动调用help函数输出帮助信息.启动和停止命令通常在init序列中执行,在系统启动时rcS仅仅执行在/etc/rc.d目录下的脚本,我们的启动脚本作为软链接放在这里.使用enable或disable命令可以自动完成这些任务.如示例5-6所示,通过调用“enable”命令可安装成功.START=15意味着启动文件将创建软链接“/etc/rc.d/S15hello”来指向“/etc/init.d/hello”,也就是说,它在START=14
+之后启动,在START=16之前启动.如果多个初始化脚本有相同的启动优先值,则调用顺序取决于启动脚本名称的字母顺序.另外使用opkg命令安装软件时一般均有执行权限,如果是自己手动新增脚本,不要忘记确认脚本是否有执行权限(通过运行chmod+x/etc/init.d/hello命令来增加执行权限).
+示例5-6:
+#通过传递“enable”参数打开自启动功能
+root@zhang:/#/etc/init.d/helloenable
+示例5-6将在/etc/rc.d目录下创建一个软链接.这些命令在系统启动和关闭时自动执行.这使我们的应用程序作为一个系统服务,在设备上电时启动,关闭时停止.同样,可以通过传递“disable”参数来关闭随系统启动,这将启动软链接移除.当前状态查询传递
+“enabled”参数,如示例5-7所示.
+示例5-7:
+root@zhang:/#/etc/init.d/helloenabled
+root@zhang:/#echo$?
+这个命令将返回是否随系统启动的信息,如果随系统启动,则返回0,否则返回1.返回值通过“$?”变量来查询.
+请注意很多守护进程包含在官方发行版中,默认都会创建自启动链接文件.但是否启动成功并提供服务要受到配置文件的控制.例如守护进程cron默认会调用启动脚本,但因为判断没有定时任务的配置,启动进程将结束.因此第一次编辑crontab文件后,不会有实质的定时动作执行,你需要通过“/etc/init.d/cronstart”再次启动定时任务进程.
+
+5.4补丁生成及应用工具
+-----------------------------------------------------------
+
+在开源中,一般有很多开发人员协作开发,但这些人处于世界各地.这就会遇到代码如何集成到一起的问题.未参与过的新手通常会认为这不是问题,然后将所有修改文件一块打包为“.tar.gz”的压缩文件,并通过邮件发送给开源社区集成人员.这时开源社区的集成人员一般会直接回复“请看如何提交代码文档”.因为集成人员无法确认你基于哪个版本在何处做了修改,因为软件代码始终在持续修改中.开源社区使用补丁来进行提交和管理代码,常用的代码管理工具有SVN及Git,但这两个工具均需要安装及配置,比较复杂.并且在20世纪80年代并没有这些现代化的工具,于是就产生了diff/patch工具集,这样就可以脱离手动进行对比和合并代码,极大地提高了集成效率.
+
+5.4.1 补丁
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+补丁是包含一个源码树的两个不同版本之间的差异文本文件.补丁通过“diff”程序创建.为了正确应用补丁,你需要清楚产生补丁的基础版本和所要更改的源代码的版本.补丁有时也称为diff文件或patch文件.使用补丁文件的格式通常有两种:“统一格式”和“传统格式”.现在大多数开源项目均使用统一格式,OpenWrt也使用统一格式.统一格式保存了补丁文件的上下文信息,默认保存上下3行,便于开发人员交流使用.以下为统一格式文件包含的信息.
+
+●“−−−”开头表示原始文件.
+●“+++”开头表示新文件.
+●“@@”表示补丁文件区段的开始,并以“@@”结尾.中间会有4个数字,“–”开头表示原始文件的行号和显示的范围,“+”开头表示在新文件中的行号和范围.
+●开头为“+”,表示该行在原始文件中不存在,在新文件中增加.开头为“−”,
+
+
+表示该行在原始文件中存在,但在新文件中删除了.没有前导“+/−”字符,表示该行在原始文件和新文件中均存在,没有修改,这些用于辅助定位修改行在文件的位置.我们以“100-fix-dhcp-no-address-warning.patch”补丁来说明文件格式含义,该文件在源码树“package/network/services/dnsmasq/patches”目录下.如图5-1所示.文件中第一行“---a/src/dhcp.c”表示原始文件A,第二行“+++/b/src/dhcp.c”表示被修改后的文件B.第3行表示在补丁文件中有A文件的从第146行开始的7行文本,有B文件的从146行开始的7行文本,并且保存在“voiddhcp_packet()”函数中.第4行到第6行为A、B文件共有的3行代码.第7行仅在A文件中存在,第8行仅在B文件中存在.9~11行为A和B均有的3行代码.补丁文件的第12行表示另外一个差异块在voiddhcp_packet()函数中,补丁文件中有A文件的从第272行开始的11行文本,有B文件从第272行开始的9行文本.补丁文件中的16、17、19和20行在A文件中存在,在B文件中不存在.21和22行在B文件中存在,在A文件中不存在.A和B两个文件均包含18行和23~25行.
+图5-1dnsmasq补丁文件100-fix-dhcp-no-address-warning.patch
+
+5.4.2 diff工具
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+diff是用来比较两个文件或目录的工具.用这个工具,你可以将自己的修改生成一个补丁文件,提交给集成团队进行代码合并.
+
+创建补丁包时,原始文件或目录放在前面,修改后的文件放在后面.使用“diff-up”或者“diff-uprN”来创建补丁包.在创建自己的代码补丁包时,需要确定使用“统一格式”还是使用“传统格式”.Linux和OpenWrt开发社区使用“统一格式”,也就是使用diff工具的“-u”选项.
+
+使用“-p”参数来显示每一个改变的C语言函数,这样生成diff结果补丁包时可读性更好.一般在比较文件时,会在代码包的顶层目录进行比较,这样补丁包包含了目录信息,不用再进入具体的目录来打补丁.
+
+对单个文件创建补丁,以修改dnsmasq中的src/dhcp.c文件为例,会执行以下步骤:
+
+SRCTREE=dnsmasq
+MYFILE=src/dhcp.c
+cp$SRCTREEa-a#原始文件在a目录下.
+cp$SRCTREEb-a#b目录用于修改文件.
+vib/src/dhcp.c#完成修改.
+diff-upa/src/dhcp.cb/src/dhcp.c-up>zhang1.patch
+
+创建多个文件的补丁包时,你需要首先检出一个干净版本代码,即未做任何修改的源码树,再来和自己修改的源码树(未做编译)比较,这种情况下不能在编译目录进行比较,因为编译后会生成一些编译信息文件.比较命令参考如下:
+diff-uprNab>zhang2.patch
+diff[命令行选项]原始文件目录新文件目录
+diff是按行来比较两个代码文件的工具,至少需要两个参数,原始文件在前,修改后文件放在后面.比较结果将输出到屏幕上,使用重定向符号“>”输出到文件中.以下为
+几个常用选项参数含义.
+-p--show-c-function:在每一个更改处显示C函数,方便程序员合并及定位代码.
+-u-UNUM--unified[=NUM]:按统一格式输出,并且在补丁中输出前后NUM行
+(默认3行).
+-N--new-file:对于不存在的文件,认为是空白文件和新增文件,即在补丁文件里面包含新的文件内容.
+-r--recursive:递归比较子目录,很多文件在不同目录里修改时使用.
+
+
+5.4.3 patch工具
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+如何应用补丁?patch工具提供了这样的功能.patch程序读取diff文件,然后将补丁文件中的描述应用在源代码树上.补丁通常应用在源代码目录的父目录上.以Linux内核源代码为例,这意味着包含在补丁文件中的路径包含了补丁文件所在的内核源代码目录(或者其他目录名,如“a/”“b/”),这将不能匹配在本地机器上内核文件的源代码路径,但是查看产生补丁的内核版本非常有用,你应当更改工作目录到内核源代码目录路径,在应用补丁文件时从patch文件中剥去路径的第一个元素(使用patch命令的-p1参数).应用补丁命令如下:
+
+patch-p1<../patch-x.y.z
+
+恢复先前应用的补丁,使用-R参数来打补丁,即返回到应用补丁之前代码的命令为:
+
+patch-R-p1<../patch-x.y.z
+
+如何将补丁文件传递给“patch”程序?通常有3种不同的方法可以采用.第一种通过标准输入stdin来传递文件给patch程序.例如:
+
+patch-p1<path/to/patch-x.y.z
+
+第二种方法是使用-i参数来传递补丁文件名,例如:
+
+patch-p1-ipath/to/patch-x.y.z
+
+第三种方法是使用管道,将补丁文件输出,然后将输出使用管道定向到patch程序中.例如:
+
+cat path/to/patch-x.y.z|patch-p1
+
+如果补丁文件是使用gzip或bzip2压缩的,在应用补丁前不用解压缩.你可以使用下面的命令:
+
+zcatpath/to/patch-x.y.z.gz|patch-p1
+bzcatpath/to/patch-x.y.z.bz2|patch-p1
+
+patch的另外一个经常使用的参数是-s,这样打补丁时输出会很少,将只有出错信息.这可以防止错误消息淹没在输出中.还有一个常用参数是“--dry-run”,即仅仅输出将要发生的事情且不会做任何实际修改.最后“-verbose”会告诉patch输出当前尽可能多的信息.常用可选参数含义如下.
+- -f:强制打入补丁,不用询问.
+- -p1:略过一层前导目录.
+- -E:打完补丁后,如果文件内容为空,会将其移除.
+- -d:表示在指定目录下执行.
+- -R:这个选项用于删除补丁,如果该补丁是交换了原始和新的文件创建的,那使用该选项就是应用补丁.
+- --dry-run:试打入,输出打入这个补丁之后的结果,但是不做任何真正修改.
+- --verbose:会告诉patch输出当前尽可能多的信息.
+
+打补丁时的常见情况当使用patch工具应用补丁文件时,它将验证文件的正确性.首先检查文件是不是合法的补丁文件,然后检查匹配补丁文件提供的上下文.如果patch工具遇到了一些问题,它有两种选择:拒绝修改并结束整个过程;或者是找到合并的位置并做微小改变之后应用这个补丁.一个常见情况是补丁不能精确定位代码行位置,patch工具将试图修正位置.例如,
+所有的上下文匹配,但是代码行匹配有些微小的位置不同.这些是很可能发生的,例如补丁是在一个文件的中间部分做了修改,但是由于一些其他的原因,文件在开始部分做了增加或减少.在这种情况下仅仅上移或下移一点即可.patch工具将调整行号并应用补丁.如果应用补丁时,位置有调整将会出现“fuzz”提示,这时你就需要检查程序处理的这一处修改是否正确,大多数情况下都是正确的.但有时合并结果就是错误的,我就曾经遇到过,因为大多数函数的最后3行附近都是一样的,在合并时位置调整到另外的函数中了.如果patch遇到不能用“fuzz”提示来修改,它就会彻底拒绝应用这个修改并保存到“.rej”文件中.然后查看这个文件并分析不能应用的原因.这样你就可以手动按照你的要求来合并代码.
+如果patch停止执行并输出了一个“Filetopatch:”的提示,那就是补丁找不到需要打补丁的文件.最有可能的情况是你忘记指定-p1或者使用了错误的目录.少数时候,你会发现需要使用-p0,而不是-p1,这可能是某位程序员没有按照要求提交补丁文件.如果执行过程中遇到了类似“Hunk#1succeededat2345withfuzz1(offset10lines).”的消息,这意味着补丁调整了更改的位置(这个例子中移动了10行).结果是否正确需要进行检查,这种情况出现在你想在产生补丁包的不同版本上应用补丁的时候.如果出现类似“Hunk#3FAILEDat3456.”的提示,这意味着补丁不能正确应用,将产生一个更改失败的“.reg”文件,也会有一个没有任何修改原始内容的“.orig”文件,这时你就需要手动合并代码.这种情况一般是由于两个程序员同时修改同一个文件的相同或相近的代码导致的.如果出现“Reversed(orpreviouslyapplied)patchdetected!Assume-R?[n]”的提示,那是patch工具探测到已经包含这个补丁的修改.如果是你重新应用这个补丁,选择“n”退出这个过程.如果你是以前应用过这个补丁,现在想还原,但是忘了指定“-R”选项,那就输入“y”来还原代码.这也发生在创建补丁的过程中颠倒了原始目录和修改目录的情况,在这种情况下还原其实是应用补丁.
+
+如果出现类似的一则消息“patch:****unexpected end of file in patch”或“patch unexpectedly ends inmiddle of line”,则意味着检测到补丁文件中的错误.无论是在下载过程中损坏了,还是没有解压缩补丁,或者你正在使用一个邮件客户端修改补丁文件.例如将一个长行分成两行,往往这些警告很容易修改,例如连接被分开的两行或者重新进行下载.我曾经遇到一个问题是在提交html格式的帮助文件时,html文件被感染了病毒,在每一个html文件内容后面加上了访问广告网站的链接,这显然是没有认真检查提交的补丁文件内容.

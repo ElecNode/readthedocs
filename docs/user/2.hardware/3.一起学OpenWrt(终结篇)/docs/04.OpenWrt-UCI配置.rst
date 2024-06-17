@@ -1,0 +1,488 @@
+04.OpenWrt-UCI配置
+===========================================================
+
+UCI(UnifiedConfigurationInterface)是OpenWrt服务系统的统一配置接口.
+UCI是用户配置重要的系统设置的主要接口,这些配置包括网络设置、无线设置、日志功能、远程访问设置.
+
+4.1 UCI简介
+-----------------------------------------------------------
+
+4.1.1 文件语法
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+配置文件由配置节(section)组成,配置节由多个“name/values”选项对组成。每一个配置节都需要有一个类型标识,但不一定需要名称。每一个选项对都有名称和值,写在其所属于的配置节中。语法如下:
+
+config <type> ["<name>"]    #Section
+	option <name> "<value>" #Option
+
+在UCI的配置文件中通常包含一个或多个配置节,所谓的配置节是带有一个或多个选项的语句。示例4-1所示的是OpenWrt中的一个实际配置文件(/etc/config/system)。
+示例4-1:
+
+config system
+	option hostname OpenWrt
+	option timezone UTC
+config timeserver ntp
+	list server 0.openwrt.pool.ntp.org
+	list server 1.openwrt.pool.ntp.org
+	list server 2.openwrt.pool.ntp.org
+	list server 3.openwrt.pool.ntp.org
+	option enabled 1
+	option enable_server 0
+
+“config system”语句定义了一个配置节的开始,配置类型为“system”但没有名称。没有名称标识的配置节称为匿名配置节。选项“option host name OpenWrt”和“option time zone UTC”两行定义了这个配置节的两个简单配置。类型和选项的含义均由应用程序来决定,类型一般用于应用程序决定如何处理配置节包含的配置选项。如果一个选项是不存在的并且是必需的,那应用程序通常会触发一个异常或者记录一个异常的日志,然后程序退出。通常选项在配置文件中都是使用空格或制表符缩进来标识,但这个并非是语法要求,仅仅是为了增加配置文件的可读性。
+
+“config timeserver ntp”语句定义了另外一个配置节的开始,类型为“timeserver”,名称为“ntp”。在开始带有list关键字的选项,表示有多个值被定义,所有的语句有同一个选项名称“server”。在我们的例子中均为NTP服务器地址,组合为相同顺序的单链表来处理。option和list用来提高配置文件的可读性,并且在语法上也要求使用关键字来表示配置选项的开始。通常不需要使用引号引上类型标识符或值,引号只在封闭的值包含空格或制表符的情况下需要。它可以合法地使用双引号和单引号。下面是所有的合法UCI文件选项语法示例。
+
+option example value
+option 'example' value
+option example "value"
+option "example" 'value'
+option 'example' "value"
+option 'example' "somevaluewithspace"
+
+下面的例子是错误的UCI文件语法。
+option 'example" "value'             (引号没有配对)
+option example some value withspace  (带有空格的值缺少引号)
+UCI标识符和配置文件的名称只能包含字母a~z、0~9和_。例如连字符(-)是不允许的。选项的值可以包含任何字符,但需要将它们正确地加上引号。
+
+4.1.2 统一配置原理
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+OpenWrt有很多独立的第三方应用程序,大多数应用程序的软件包维护者已经制作了UCI兼容的配置文件,启动时由UCI配置文件转换为软件包的原始配置文件。这是在运行初始化脚本/etc/init.d/中执行的。因此,当开始执行一个UCI兼容的守护进程初始化脚本时,你应该意识到程序的原始配置文件被覆盖了。例如,在DNS代理服务器dnsmasq进程启动的情况下,文件/var/etc/dnsmasq.conf是从UCI配置文件/etc/config/dhcp生成并覆盖的,是运行/etc/init.d/dnsmasq脚本进行配置文件转换的。因为应用程序的配置文件是启动时通过UCI转换生成的,因此它不需要存储在非易失性存储器中,通常存储在内存中而不是在闪存中,而var目录为其内容在正常运行时不断变化的目录,因此将var目录创建为/tmp目录的一个链接。OpenWrt的大多数配置都基于UCI文件,如果你想在软件原始的配置文件调整设置,可以通过禁用UCI方法来实现。OpenWrt系统的核心配置分成很多个文件,并且都位于/etc/config目录下。每个文件涉及系统配置的某一部分。你可以用一个文本编辑器修改,或用命令行实用程序UCI编辑配置文件。UCI的配置文件也可通过各种编程API(如shell、Lua和C等)来修改,这也是Web接口例如LuCI修改UCI文件的方式。无论是通过一个文本编辑器还是命令行工具修改配置文件,在改变一个UCI的配置文件后,受影响的服务或可执行程序必须由init.d进行重启,这样更新UCI配置才会真正生效。许多程序是通过它们的初始化脚本与UCI配置兼容的。init.d将UCI配置转换为它们软件特定的配置文件。init.d首先在该软件预期的位置生成这样的一个配置文件,它通过重新启动可执行程序再次读入配置。注意:如果只是直接启动可执行文件,没有通过init.d调用,将不会将一个UCI配置文件更新到特定程序相应的配置文件位置,在/etc/config/的修改将不会对现有进程有任何影响。例如,在修改UCI配置文件时,如果你想将局域网网关IP地址从默认地址192.168.1.1修改为192.168.6.1,可以使用vi编辑器修改/etc/config/network。这里我们使用uci命令来修改。
+
+uci set network.lan.ipaddr=192.168.6.1
+uci commit network
+下一步通过运行以下命令使修改生效。
+/etc/init.d/network restart
+在这种情况下,你需要使用新的IP地址来登录路由器设备。路由器常用功能配置文件如表4-1所示。所有的UCI配置文件均默认保存在“/etc/config”目录下。
+表4-1常用功能配置文件含义
+文件路径含义
+/etc/config/dhcpDnsmasq软件包配置,包含DHCP和DNS设置
+/etc/config/dropbearSSH服务器选项
+/etc/config/firewall防火墙配置,包含网络地址转换、包过滤和端口转发等
+/etc/config/network网络配置,包含桥接、接口和路由配置
+/etc/config/system系统设置,包含主机名称,网络时间同步等
+/etc/config/timeserverrdate的时间服务列表
+/etc/config/luci基本的LuCI配置
+/etc/config/wireless无线设置和Wi-Fi网络定义
+/etc/config/uhttpdWeb服务器选项配置
+/etc/config/upnpdminiupnpdUPnP服务设置
+/etc/config/qos网络服务质量的配置文件定义
+
+4.1.3 UCI工具
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+在开发调整配置时,可以直接使用vi编辑器修改UCI配置文件。但是UCI统一配置文件的目的就是所有OpenWrt配置可以通过统一接口读取和修改。对于开发人员而言,如果使用awk和grep工具来解析将是非常低效的,UCI实用工具提供了修改和分析UCI文件的脚本编程开发接口。当使用UCI工具写入配置文件时,配置文件都是整个重写并且不需要确认命令。这意味着在文件中任何多余的注释行和空行均会被删除。如果你有UCI类型的配置文件,想保存自己的注释和空行,那就不应该使用UCI命令行工具来编辑文件。
+
+下面是UCI工具选项的含义和基本使用方法,以及一些如何使用这个非常便利的命令行接口工具的示例。
+
+zhang@zhang-laptop:~$uci
+Usage:uci[<options>]<command>[<arguments>]
+
+Commands:
+batch
+export[<config>]
+import[<config>]
+changes[<config>]
+commit[<config>]
+add<config><section-type>
+add_list<config>.<section>.<option>=<string>
+del_list<config>.<section>.<option>=<string>
+show[<config>[.<section>[.<option>]]]
+get<config>.<section>[.<option>]
+set<config>.<section>[.<option>]=<value>
+delete<config>[.<section>[[.<option>][=<id>]]]
+rename<config>.<section>[.<option>]=<name>
+revert<config>[.<section>[.<option>]]
+reorder<config>.<section>=<position> 
+
+Options:
+-c <path>setthesearchpathforconfigfiles(default:/etc/config)
+-d <str>setthedelimiterforlistvaluesinucishow
+-f <file>use<file>asinputinsteadofstdin
+-m whenimporting,mergedataintoanexistingpackage
+-n nameunnamedsectionsonexport(default)
+-N don'tnameunnamedsections
+-p <path>addasearchpathforconfigchangefiles
+-P <path>addasearchpathforconfigchangefilesanduseasdefault
+-q quietmode(don'tprinterrormessages)
+-s forcestrictmode(stoponparsererrors,default)
+-S disablestrictmode
+-X donotuseextendedsyntaxon'show'
+
+.. csv-table:: UCI命令含义
+  :align: center
+  :header: 命令, 含义
+  :widths: 15,30
+
+add , 增加指定配置文件的类型为section-type的匿名区段
+add_list , 对已存在的list选项增加字符串
+commit , 对给定的配置文件写入修改,如果没有指定参数则将所有的配置文件写入文件系统。所有的“uciset”“uciadd”“ucirename”和“ucidelete”命令将配置写入一个临时位置,在运行“ucicommit”时写入实际的存储位置
+export , 导出一个机器可读格式的配置。它是作为操作配置文件的shell脚本而在内部使用,导出配置内容时会在前面加“package”和文件名
+import , 以UCI语法导入配置文件
+changes , 列出配置文件分阶段修改的内容,即未使用“ucicommit”提交的修改。如果没有指定配置文件,则指所有的配置文件的修改部分
+show , 显示指定的选项、配置节或配置文件。以精简的方式输出,即key=value的方式输出
+get , 获取指定区段选项的值
+set , 设置指定配置节选项的值,或者是增加一个配置节,类型设置为指定的值
+delete , 删除指定的配置节或选项
+rename , 对指定的选项或配置节重命名为指定的名字
+revert , 恢复指定的选项,配置节或配置文件例如设置值,如果你想更改系统局域网的网关地址,从默认值“192.168.1.1”修改为“192.168.56.11”,示例4-2所示的就是修改路由器系统局域网网关地址的方法。配置文件在/etc/config/network文件中。
+
+示例4-2:
+root@OpenWrt:~#uci set network.lan.ipaddr=192.168.56.11
+root@OpenWrt:~#uci commit network
+root@OpenWrt:~#/etc/init.d/network restart
+
+配置结束后,现在的配置文件已经更新并设置到网卡上了。如果是通过网络登录到OpenWrt上面的,就需要使用新的IP地址连接。当有多个配置节类型相同或者为匿名配置节时,UCI使用数组数字引用它们。OpenWrt系统默认有3个网卡接口,可以通过network.@interface[0]来引用第一个,通过network.@interface[1]来引用第二个,通过network.@interface[2]来引用第三个。也可以使用负索引,例如network.@interface[−1],其中“−1”指的是最后一个,“−2”指的是倒数第二个,等等。这在最后增加新的规则列表时是非常方便的。以network配置文件为例,示例4-3所示的是获取各个网卡名称的方法。
+
+#/etc/config/network
+
+config interface'loopback'
+	option ifname 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+config interface 'wan'
+	option ifname 'eth0'
+	option _orig_ifname 'eth0'
+	option _orig_bridge 'false'
+	option proto 'dhcp'
+config interface 'lan'
+	option ifname 'eth1'
+	option proto 'static'
+	option ipaddr '192.168.56.10'
+	option netmask '255.255.255.0'
+示例4-3:
+#lo
+uci get network.@interface[0].ifname
+uci get network.loopback.ifname
+#eth0
+uci get network.@interface[1].ifname
+uci get network.@interface[-2].ifname
+uci get network.wan.ifname
+#eth1
+uci get network.@interface[2].ifname
+uci get network.@interface[-1].ifname
+uci get network.lan.ifname
+
+有些运行中的状态值没有保存在/etc/config目录下,而是保存在/var/state下,这时可以使用“-P”参数来查询当前状态值,查询命令如示例4-4所示。
+示例4-4:
+root@OpenWrt:~# uci -P/var/state show network.wan
+network.wan=interface
+network.wan.ifname=eth0
+network.wan._orig_ifname=eth0
+network.wan._orig_bridge=false
+network.wan.proto=dhcp
+network.wan.up=1
+network.wan.connect_time=7
+network.wan.device=eth0
+当为链表配置时,操作方法有所不同,示例4-5所示的是操作链表的方法。
+示例4-5:
+#增加到链表中一个配置项:
+root@OpenWrt:~#>uci add_list system.ntp.server='ntp.bjbook.net'
+#删除链表中的一个配置项:
+root@OpenWrt:~#>uci del_list system.ntp.server='ntp.ntp.org'
+
+
+#删除链表中的所有配置项:
+root@OpenWrt:~#>uci delete system.ntp.server
+我们以一个自定义示例来结束本节。我们创建一个helloRoute的配置,里面有3项内
+容,启动延迟时间、访问URL和用户代理属性,内容如示例4-6所示。
+示例4-6:
+config system 'globe'
+option agent 'bjbook'
+option url 'www.bjbook.net/openwrt'
+option delay 100
+首先通过命令行创建配置文件。像上面的配置一样,如果你想增加一个配置节,大多数人都会想到使用“uci add”命令,但实际上“uciadd”仅可以创建匿名配置节,不能完成创建命名配置的目标,要使用“uci set”命令来完成。示例4-7所示的是使用UCI命令来创建自定义配置文件。
+示例4-7:
+root@OpenWrt:~#>touch /etc/config/hello
+uci set hello.globe=system                //设置配置节类型为system
+#以下3行设置配置节的3个选项
+root@OpenWrt:~#>uci set hello.globe.agent=bjbook
+root@OpenWrt:~#>uci set hello.globe.url='www.bjbook.net/openwrt'
+root@OpenWrt:~#>uci set hello.globe.delay=100
+root@OpenWrt:~#>uci commit               //提交配置修改
+
+4.1.4 配置脚本
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+UCI模块提供了一个shell脚本(/lib/config/uci.sh)并封装了UCI命令行工具的功能,这样方便了其他软件包在将UCI配置文件转换为自己格式的配置文件时使用。主要提供的函数在表4-3中。函数名以“uci”开头。在单独导入uci.sh时,uci_load函数并不能执行成功,因为uci_load函数引用了/lib/functions.sh的一些函数定义,因此在使用uci_load函数时需要先导入functions.sh的函数定义。
+
+
+表4-3uci.sh常用函数含义
+
+.. csv-table:: UCI命令含义
+  :align: center
+  :header: 函数名称, 含义
+  :widths: 15,30
+
+uci_load , 从UCI文件中加载配置并设置到环境变量中,可以通过env命令来查看。该命令需要和functions.sh中的定义共同使用
+uci_get , 从配置文件中获取值。至少需要一个参数,指明要获取的配置信息。例如获取系统主机名称调用:uci_getsystem.@system[0].hostname
+uci_get_state , 指定从/var/state中获取状态值
+
+functions.sh的主要原理是将配置文件中的配置选项设置到环境变量中,然后提供接口函数在环境变量中获取。其中设置到环境变量中调用了uci.sh中的uci_load函数。uci_load函数又调用了functions.sh定义的config()、option()、list()等函数,将配置导入环境变量中。在使用这些函数时,以点开头来将这些函数加载到执行空间中,注意点和执行文件中间有一个空格。例如:
+./lib/functions.sh//装载函数
+
+functions.sh函数含义如表4-4所示。
+表4-4fuctions.sh函数含义
+
+.. csv-table:: UCI命令含义
+  :align: center
+  :header: 函数名称, 含义
+  :widths: 15,30
+
+config , 供uci.sh调用,将配置节设置到环境变量中
+option , 供uci.sh调用,将配置节中的选项设置到环境变量中
+list , 供uci.sh调用,将配置节中的链表配置设置到环境变量中
+config_load , 调用uci_load函数来从配置文件中读取配置选项,并设置到环境变量中
+config_get , 从当前设置环境变量中获取配置值
+config_get_bool , 从当前设置的环境变量中获取布尔值,并将它进行格式转换,如果为真,转换为1,否则转换为0。因为UCI的布尔值有多种类型均支持。on、true、enabled和1表示真,off、false、disable和0表示假
+config_set , 将变量设置到环境变量中以便后续读取。注意:仅设置到环境变量中并没有设置到配置文件中
+config_foreach , 对于未命名的配置进行遍历调用函数。共两个参数,第一个参数为回调函数,第二个参数为配置节类型,这个函数适用于匿名配置节的转换处理
+
+通常的转换执行流程是首先通过调用config_load函数将UCI配置读入当前环境变量中。然后使用config_get等函数进行读取和转换配置。其中config_load函数默认从/etc/
+
+
+config目录下读取配置,并设置到环境变量中。以config_get函数为例来说明执行流程。config_get函数从环境变量中读取配置值并赋值给变量。这个函数至少要3个参数。
+第1个参数为存储返回值的变量。
+第2个参数为所要读取的配置节的名称。
+第3个参数是所有读取的选项名称。
+第4个参数是为默认值,如果配置文件没有该选项则返回该默认值,是一个可选的参数。
+示例4-8所示为OpenWrt12.09的一个实际代码,在启动时,从配置文件中获取主机
+名称,并设置到内核中。
+示例4-8:
+local hostname conloglevel timezone
+config_get hostname"$cfg" hostname 'OpenWrt'
+echo "$hostname" > /proc/sys/kernel/hostname
+
+以“uci_”开头的函数和以“config_”开头的函数大多数功能完全相同,唯一不同的是“uci_get”等函数直接从文件中获取,而“config_get”函数从环境变量中读取。这一点导致两者存在性能差异,“config_get”函数使用“config_load”一次从配置文件中读取设置到环境变量中,以后均不再进行磁盘操作;而“uci_get”每次均从文件中读取。如果调用多次,两者性能差距就会显现,实际测试中两者相差10倍以上。因此在OpenWrt中大多使用以“config_”开头的“config_get”等函数进行配置文件转换。
+
+4.2 UCIAPI编程接口
+-----------------------------------------------------------
+
+UCI不仅提供命令接口供脚本开发者使用,而且提供了C语言调用接口。下面在普通桌面操作系统Ubuntu下来说明API的使用。首先准备UCI编程接口的使用环境。UCI软件依赖Libubox,因此首先编译Libubox。
+
+4.2.1 Libubox
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Libubox是OpenWrt的一个必备的基础库,包含大小端转换、链表、MD5等实用工具基础库,采用Cmake来编译。
+Cmake是跨平台的产生Makefile的命令行工具,它应用于在脚本文件中配置工程。工程选项设置可以在命令行通过-D选项设置。-i选项可以打开交互提示来进行设置。它是一个跨平台的编译系统生成工具。通过平台独立Cmake的listfiles文件来指定构建过程。这个文件在每一个源码目录树目录下均有一个,文件名为CmakeLists.txt。Libubox和UCI均使用Cmake命令来产生目标平台的构建系统命令。因此我们首先安装Cmake:
+
+$>sudo apt-get install cmake
+接着我们编译Libubox,Libubox编译指令如示例4-9所示。
+示例4-9:
+tar-xzf libubox-2015-06-14-d1c66ef1131d14f0ed197b368d03f71b964e45f8.tar.gz
+cd libubox-2015-06-14
+cmake -D BUILD_LUA:BOOL=OFF -D BUILD_EXAMPLES:BOLL=OFF.
+make;
+sudo make install;
+注意在Cmake生成Makefile时,后面有一个点,表示在当前目录执行。生成Makefile时,设置了两个编译开关为OFF,这两个分别是lua和使用示例,我们不进行编译,因此把编译选项关闭。在进行编译时,编译过程中会输出编译进度百分比。编译完成之后进行安装,安装到系统目录中,需要使用管理员权限并输入密码,因此会加上sudo命令。安装内容包含头文件和动态链接库文件。头文件默认安装在/usr/local/include/libubox目录下,动态链接库libubox.so和libubox.a安装在/usr/local/lib/目录下。
+
+4.2.2 UCI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+在Libubox安装完成后即可编译安装UCI软件了。我们同样进入dl目录,将UCI库
+
+
+解压缩并编译安装。命令如示例4-10所示。
+示例4-10:
+tar -xzf uci-2015-04-09.1.tar.gz
+cd uci-2015-04-09
+cmake -D BUILD_LUA:BOOL=OFF.
+make
+sudo make install
+sudo ldconfig
+UCI库的头文件安装在/usr/local/include目录下,动态链接库安装在/usr/local/lib/libuci.so,可执行程序为/usr/local/bin/uci。运行ldconfig命令是因为系统还不知道动态链接库已经安装,运行该命令会告诉系统重新加载动态链接库,这样UCI动态链接库就可以使用了。编译时使用以下命令来链接UCI库。
+gcc test.c -o test -luci
+
+4.2.3 UCIAPI接口
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+UCI接口命名非常规范,统一以小写的uci开头并放在uci.h头文件中。大多数函数的第一个参数均为uci_context的指针变量。这个变量在程序初始化时调用uci_alloc_context函数分配空间并设置初始值。在程序执行结束时调用uci_free_context函数释放空间。UCI接口有设置函数uci_set,但没有相应的获取函数uci_get,UCI使用uci_lookup_ptr来提供查询功能,如果查到则通过获取ptr变量的值来获取配置的值。5.2节会有一个UCI接口的使用示例。UCIAPI接口
+
+含义如表4-5所示。
+表4-5UCIAPI接口含义
+
+.. csv-table:: UCIAPI接口含义
+  :align: center
+  :header: 函数, 含义
+  :widths: 15,30
+
+uci_alloc_context , 分配UCI上下文环境对象
+uci_free_context , 释放UCI上下文环境对象
+uci_load , 解析UCI配置文件,并存储到UCI对象中。@name:配置文件名,相对于配置目录。@package:在这个变量中存储装载的配置包
+uci_unload , 从UCI上下文环境对象中unload配置文件
+uci_lookup_ptr , 分割字符串并查找。@ptr:查找的结果。@str:待查找的字符串,但str不能为常量,因为将被修改赋值,在ptr变量内部会被使用到,因此str的寿命必须至少和ptr一样长。@extended是否允许扩展查找uci_set设置元素值,如果必要将创建一个元素。更新或创建的元素将存储在ptr->last中uci_delete , 删除一个元素,配置节或选项
+uci_save , 保存一个package修改的delta 
+uci_commit , 提交更改package,提交将重新加载整个uci_package 
+uci_set_confdir , 修改UCI配置文件的存储位置,默认为/etc/config
+
+4.3 系统内核设置
+-----------------------------------------------------------
+
+OpenWrt也是一个Linux操作系统,因此它和桌面操作系统Ubuntu及Fedora一样,采用sysctl作为系统的内核配置工具。sysctl.conf作为其内核配置文件在启动时进行加载。
+
+4.3.1 sysctl.conf
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+这个文件是系统启动预加载的内核配置文件,通过sysctl命令读取和设置到系统当中。配置文件语法格式如下:
+
+# comment
+; comment
+token = value
+
+以“#”和分号开头的行均为注释行,并忽略空白行,配置值以key=value形式进行设置。例如,设置打开报文转发为net.ipv4.ip_forward=1。这个文件在OpenWrt源码中保存在packages/base-files/files/etc/sysctl.conf目录下。
+
+表4-6OpenWrt常见内核配置项含义
+配置项含义默认值
+
+.. csv-table:: penWrt常见内核配置项含义
+  :align: center
+  :header: 配置项,含义,默认值
+  :widths: 15,30,30
+
+net.ipv4.ip_forward , 是否打开、在接口之间转发报文,表示系统启用接口之间报文转发,这是单机版桌面系统和路由器之间的最大的不同。网卡将接收不属于自己IP的报文并根据路由表进行转发。设置为0表示关闭转发,设置为1表示打开转发 , 1
+net.ipv4.ip_default_ttl , 用于发送报文的默认TTL值,介于1和255之间 , 64
+net.ipv4.conf.all.send_redirects , 如果为路由器,将发送重定向  ,  
+net.ipv4.icmp_echo_ignore_all , 如果设置为非零值,内核将忽略所有发给自己的ICMPECHO请求 , 0
+net.ipv4.icmp_echo_ignore_broadcasts , 如果为非零值,内核将忽略所有发往广播或组播地址的ICMPECHO请求 , 1
+net.ipv4.icmp_ignore_bogus_error_responses , 对于广播地址的请求响应,记录在log里面。如果设置为1,不再给出警告 , 1
+icmp_ratelimit , 限制匹配icmp_ratemask的发送ICMP报文的最大速率,0表示不限制 , 1000
+net.ipv4.tcp_keepalive_time , TCP流的保活时间 , 120秒
+net.ipv4.conf.default.arp_ignore , 定义接收到解析本地目标IP地址的ARP请求时的不同的发送响应模式。
+0:回复配置在任何接口上的任何本地目标IP地址
+1:仅回复目标IP配置在报文所进入的接口上的请求
+2:仅回复目标IP是报文所进入的接口的请求,并且发
+送请求者的IP地址和接口IP在同一子网
+3:不回复本主机配置的IP地址的ARP查询 , 1
+net.ipv4.conf.default.rp_filter , 报文反向过滤技术,系统在接收到一个IP包后,检查该IP是不是合乎要求,不合要求的IP包会被系统丢弃。在使用组播功能时,需要将该选项关闭 , 0
+
+4.3.2 sysctl
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+sysctl是用于修改运行中的内核参数的命令,所有可用的内核参数均在/proc/sys目录下。运行sysctl需要procfs文件系统支持。可以用sysctl读取和修改内核参数数据。参数以key=value形式进行设置。
+
+-n:查询时输出配置项的值,但不输出配置项。
+-e:当碰到不认识的配置项时,忽略错误。
+-w:使用这个选项来修改系统设置。
+-p:从指定的配置文件中加载配置,如果没有指定则使用默认的配置文件/etc/sysctl.conf。
+-a:显示当前所有可用的值。
+
+常用命令举例如下:
+/sbin/sysctl-a,显示所有的内核配置;
+/sbin/sysctl-nkernel.hostname,查询kernel.hostname的值;
+/sbin/sysctl-wkernel.hostname="zhang",修改系统主机名称为zhang;
+/sbin/sysctl-p/etc/sysctl.conf,加载配置。
+内核的参数配置在启动时由sysctl工具加载,默认加载/etc/sysctl.conf。启动之后均可在/proc/sys下查询,例如直接查询是否打开路由转发:
+cat/proc/sys/net/ipv4/ip_forward
+内核参数也可以通过直接修改/proc/sys下的文件来生效。例如打开路由转发设置,可以执行以下命令:
+echo"1">/proc/sys/net/ipv4/ip_forward
+
+4.4 系统配置
+-----------------------------------------------------------
+
+OpenWrt还有一些配置并不是通过UCI配置来实现的,这部分是大多数Linux系统都有的配置,并且用户很少修改,因此并不提供接口给用户修改。
+
+4.4.1 /etc/rc.local
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+这个文件在系统每次启动时由/etc/rc.d/S95done调用,是一个shell脚本,是在系统开机之后最后会调用到的脚本。也就是说,当有任何想要在开机之后就立即执行的命令时,直接将它写入/etc/rc.local,那么该命令就会在每次启动的时候自动被执行,而不必等我们登录系统再去执行。比如启动时增加域名服务器地址为“8.8.8.8”,则可在/etc/rc.local增加:
+
+echo"nameserver8.8.8.8">>/etc/resolv.conf
+这样就可以在系统DNS无效时有一个备份的域名服务器来查询。
+
+4.4.2 /etc/profile
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+/etc/profile为系统的每个登录用户设置环境变量。当用户第一次登录时该文件被执行,
+此文件首先输出“banner”文件的内容,紧接着为登录用户设置环境变量,并创建一些常
+用命令的链接,例如more命令链接到less,即执行more命令最终会调用less命令。
+
+#!/bin/sh
+[-f/etc/banner]&&cat/etc/banner
+
+exportPATH=/bin:/sbin:/usr/bin:/usr/sbin
+exportHOME=$(grep-e"^${USER:-root}:"/etc/passwd|cut-d":"-f6)
+exportHOME=${HOME:-/root}
+exportPS1='\u@\h:\w\$'
+
+[-x/bin/more]||aliasmore=less
+[-x/usr/bin/vim]&&aliasvi=vim||aliasvim=vi
+
+[-z"$KSH_VERSION"-o\!-s/etc/mkshrc]||./etc/mkshrc
+
+[-x/usr/bin/arp]||arp(){cat/proc/net/arp;}
+[-x/usr/bin/ldd]||ldd(){LD_TRACE_LOADED_OBJECTS=1$*;}
+
+上面的代码中共定义了3个环境变量,含义分别如下。
+
+- PATH:决定了shell命令的查找位置及顺序。
+- HOME:登录用户主目录。
+- PS1:用户命令行提示符。
+
+4.4.3 /etc/shells
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+shell是外壳的意思,是相对于Linux内核来说的。Linux有多个命令解析外壳程序,shells文件包含系统中所有外壳程序的列表。应用程序使用此文件来确定一个外壳是否有效。每一个外壳程序占用一行,内容为外壳执行程序的绝对路径。文件内容以“#”开头,表示这行为注释行,如果shells内容错误可能会导致无法登录。
+
+OpenWrt采用/bin/ash。
+
+4.4.4 /etc/fstab
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+这个文件是关于文件系统的静态信息,系统启动时读取并设置。文件fstab包含各种文件系统的描述信息,现在fstab只能通过程序读取,程序不能修改它;创建和维护这个文件的是系统管理员。
+
+每一个文件系统占用一行来描述;一行的每一个域使用空格或制表符来隔开。以“#”开头的是注释行。fstab中的条目顺序也非常重要,因为fsck、mount和umount等命令会依次读取来执行自己的任务。
+
+第1个域是fs_spec,描述特定块设备或远程文件系统被挂载。对于块设备的挂载使用“/dev/cdrom”或“/dev/sdb7”。对于NFS文件系统的挂载有主机和目录,procfs文件系统使用“proc”。另外一种可以表明文件系统类型(ext4或者swap)的是挂载的UUID或卷标,写成LABEL=<label>或<UUID=UUID>,例如,“LABEL=Boot”或“UUID=3e6be9de-8139-11d1-9106-a43f08d823a6”。这将使系统具有更好的鲁棒性:添加或删除一个SCSI磁盘时将更改磁盘装置名字,而文件系统卷标不变。
+
+第2个域是fs_file,描述的是文件系统的挂载点。对于交换分区(swap),这个域的取值应当指定为“none”。
+
+第3个域是fs_vfstype,描述的是文件系统的类型。Linux支持大量的文件系统类型,常见的文件系统类型有ext3、ext4、ntfs、proc、swap、tmpfs和vfat等,所有当前支持的文件系统列表在/proc/filesystems中。swap表示分区用于交换,ignore表示这行忽略,用于显示当前未使用的磁盘分区。
+
+第4个域是fs_mntops,描述文件系统的挂载选项(是以逗号分隔的列表选项)。它至少包含挂载类型加上额外的文件系统类型。对于所有类型的文件系统常见的选项是“noauto”(不要安装在“-a”是给出时,例如,
+在启动时)、“user”(允许用户挂载)、“owner”(允许设备所有者挂载)和“comment”(例如,使用fstab维护程序)。“owner”和“comment”选项是特定Linux支持的。
+
+第5个域是fs_freq,用于Dump程序,是用于备份使用的。
+
+第6个域是fs_passno,用于检查和修复磁盘的工具fsck程序,在启动时决定检测文件系统的顺序。根文件系统应当设置为1,其他文件系统设置为2。在一个物理设备上将先后进行检查,在不同的设备上如果使用并行能力则同时进行检测。如果第6个域不存在,则返回零,表示不需要检查。
+
+4.4.5 /etc/services
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+这个文件是互联网网络服务类型列表。这是一个普通的ASCII编码文件,提供了友好的文本名称和互联网服务之间的映射,还包含了端口号和协议类型。每一个网络程序均可以从这个文件得到服务的端口号和协议。C函数库getservent、getservbyname、getservbyport、setservent和endservent支持从这个文件查询。
+
+端口号由IANA组织赋值,当前策略是在使用端口号时同时赋值给TCP和UDP协议。端口号小于1024(低端口号)仅可以被有管理员权限的用户使用。这是服务器的标准实现。这样客户端连接到低端口号是可以信赖的,而不是使用服务器的普通用户运行的欺骗程序。众所周知,端口号由IANA指定并在管理员控制的空间中运行。服务类型的存在并不意味着该服务在当前服务器上运行。该文件每行描述一个服务,形式如下。
+
+	service-name port/protocol [aliases...]
+
+- service-name是服务的名称,可以用于查找。它是区分大小写的。
+- port是使用这个服务的端口号(以十进制表示)。
+- protocol是使用的协议类型,匹配protocols文件中的值。通常是TCP或UDP。
+- aliases是一个可选的值,是这个服务另外的名字。同样是区分大小写的。各个域之间使用空格或者制表符来分割。注释以“#”开头,直到行结尾,并忽略空行。一个示例文件如下。
+
+ftp    21/tcp
+ssh    22/tcp
+ssh    22/udp
+telnet 23/tcp
+smtp   25/tcp
+time   37/tcp
+time   37/udp
+whois  43/tcp
+domain 53/tcp
+domain 53/udp
+bootps 67/tcp
+bootps 67/udp
+bootpc 68/tcp
+
+4.4.6 /etc/protocols
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+这个文件是协议定义描述文件,是一个普通的ASCII码文本文件,用于描述各种各样的因特网网络协议。这些数字出现在IP报文头中的协议域。每一行使用以下格式:
+protocol number aliases...
+
+这3个域由空格或制表符分隔,并且空行被忽略。如果一行包含一个“#”,则“#”后的内容部分被忽略。各部分含义如下:
+
+- “protocol” 字段是协议的名称,常见的协议有IP、TCP、UDP、ICMP、IGMP和GRE等。
+- “number” 是这个协议的数字号码,将出现在IP报头。用十进制数字表示。
+- “aliases” 是协议的选项。

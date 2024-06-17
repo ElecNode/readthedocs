@@ -1,0 +1,332 @@
+9.结构体和共用体
+================
+
+
+
+   在学习数组的时候,数组中可以存储多个相同数据类型的变量,结构体是另外一种存储多个不同数据类型的变量的数据结构。C语言允许用户自己建立由不同数据类型组合的数据结构,称之为结构体。
+
+8.1.结构体定义
+^^^^^^^^^^^^^^
+
+
+
+   结构体类型的名字是由关键字struct和结构体名组合而成,结构体名是用户指定的,又称为“结构体标记”。花括号内的结构体成员是由多个数据类型和成员名组成。
+
+.. code c
+
+   struct 结构体名
+   {
+       数据类型 成员名;
+       ...
+   };
+
+8.1.1.先声明结构体类型,在定义该类型的变量
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   .. struct student
+   .. {
+   ..     int num;
+   ..     char name[20];
+   ..     char sex;
+   ..     int age;
+   .. };
+
+   struct student student1;
+
+8.1.2.在声明类型的同时定义变量
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+.. code-block::c
+   :caption: c test
+   :emphasize-lines: 4,5
+   :linenos:
+
+   struct student
+   {
+       int num;
+       char name[20];
+       char sex;
+       int age;
+   } student1;
+
+8.1.3.不指定类型名而直接定义结构体类型变量
+                                          
+
+
+.. code-block::c
+   :caption: c test
+   :emphasize-lines: 4,5
+   :linenos:
+
+   struct
+   {
+       int a;
+       char b;
+       double c;
+   } s1;
+
+8.1.4.使用关键字typedef
+                       
+
+.. code c
+
+   typedef struct
+   {
+       int a;
+       char b;
+       double c; 
+   } Simple2;
+   Simple2 u1,u2[20],*u3;
+
+8.1.5.结构体嵌套
+                
+
+.. code c
+
+   //此结构体的声明包含了其他的结构体
+   struct COMPLEX
+   {
+       char string[100];
+       struct SIMPLE a;
+   };
+    
+   //此结构体的声明包含了指向自己类型的指针
+   struct NODE
+   {
+       char string[100];
+       struct NODE *next_node;
+   };
+
+8.2.结构体变量的初始化
+^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+   和其它类型变量一样,对结构体变量可以在定义时指定初始值。
+
+.. code c
+
+   #include <stdio.h>
+    
+   struct Books
+   {
+      char  title[50];
+      char  author[50];
+      char  subject[100];
+      int   book_id;
+   } book = {"C 语言", "RUNOOB", "编程语言", 123456};
+    
+   int main()
+   {
+       printf("title : %s\nauthor: %s\nsubject: %s\nbook_id: %d\n", book.title, book.author, book.subject, book.book_id);
+   }
+
+8.3.访问结构成员
+^^^^^^^^^^^^^^^^
+
+   为了访问结构的成员,我们使用成员访问运算符(.)。成员访问运算符是结构变量名称和我们要访问的结构成员之间的一个句号。您可以使用 struct 关键字来定义结构类型的变量。下面的实例演示了结构的用法:
+
+.. code c
+
+   #include <stdio.h>
+   #include <string.h>
+    
+   struct Books
+   {
+      char  title[50];
+      char  author[50];
+      char  subject[100];
+      int   book_id;
+   };
+    
+   int main( )
+   {
+      struct Books Book1;        /* 声明 Book1,类型为 Books */
+      struct Books Book2;        /* 声明 Book2,类型为 Books */
+    
+      /* Book1 详述 */
+      strcpy( Book1.title, "C Programming");
+      strcpy( Book1.author, "Nuha Ali"); 
+      strcpy( Book1.subject, "C Programming Tutorial");
+      Book1.book_id = 6495407;
+    
+      /* Book2 详述 */
+      strcpy( Book2.title, "Telecom Billing");
+      strcpy( Book2.author, "Zara Ali");
+      strcpy( Book2.subject, "Telecom Billing Tutorial");
+      Book2.book_id = 6495700;
+    
+      /* 输出 Book1 信息 */
+      printf( "Book 1 title : %s\n", Book1.title);
+      printf( "Book 1 author : %s\n", Book1.author);
+      printf( "Book 1 subject : %s\n", Book1.subject);
+      printf( "Book 1 book_id : %d\n", Book1.book_id);
+    
+      /* 输出 Book2 信息 */
+      printf( "Book 2 title : %s\n", Book2.title);
+      printf( "Book 2 author : %s\n", Book2.author);
+      printf( "Book 2 subject : %s\n", Book2.subject);
+      printf( "Book 2 book_id : %d\n", Book2.book_id);
+    
+      return 0;
+   }
+
+8.4.结构作为函数参数
+^^^^^^^^^^^^^^^^^^^^
+
+   您可以把结构作为函数参数,传参方式与其他类型的变量或指针类似。您可以使用上面实例中的方式来访问结构变量:
+
+.. code-block::c
+   :caption: c test
+   :emphasize-lines: 4,5
+   :linenos:
+
+   #include <stdio.h>
+   #include <string.h>
+    
+   struct Books
+   {
+      char  title[50];
+      char  author[50];
+      char  subject[100];
+      int   book_id;
+   };
+    
+   /* 函数声明 */
+   void printBook( struct Books book );
+   int main( )
+   {
+      struct Books Book1;        /* 声明 Book1,类型为 Books */
+      struct Books Book2;        /* 声明 Book2,类型为 Books */
+    
+      /* Book1 详述 */
+      strcpy( Book1.title, "C Programming");
+      strcpy( Book1.author, "Nuha Ali"); 
+      strcpy( Book1.subject, "C Programming Tutorial");
+      Book1.book_id = 6495407;
+    
+      /* Book2 详述 */
+      strcpy( Book2.title, "Telecom Billing");
+      strcpy( Book2.author, "Zara Ali");
+      strcpy( Book2.subject, "Telecom Billing Tutorial");
+      Book2.book_id = 6495700;
+    
+      /* 输出 Book1 信息 */
+      printBook( Book1 );
+    
+      /* 输出 Book2 信息 */
+      printBook( Book2 );
+    
+      return 0;
+   }
+   void printBook( struct Books book )
+   {
+      printf( "Book title : %s\n", book.title);
+      printf( "Book author : %s\n", book.author);
+      printf( "Book subject : %s\n", book.subject);
+      printf( "Book book_id : %d\n", book.book_id);
+   }
+
+8.5.指向结构的指针
+^^^^^^^^^^^^^^^^^^
+
+您可以定义指向结构的指针,方式与定义指向其他类型变量的指针相似,如下所示:
+struct Books *struct_pointer;
+现在,您可以在上述定义的指针变量中存储结构变量的地址。为了查找结构变量的地址,请把 & 运算符放在结构名称的前面,如下所示:
+struct_pointer = &Book1;
+为了使用指向该结构的指针访问结构的成员,您必须使用 -> 运算符,如下所示:
+struct_pointer->title;
+让我们使用结构指针来重写上面的实例,这将有助于您理解结构指针的概念:
+
+.. code c
+
+   #include <stdio.h>
+   #include <string.h>
+    
+   struct Books
+   {
+      char  title[50];
+      char  author[50];
+      char  subject[100];
+      int   book_id;
+   };
+    
+   /* 函数声明 */
+   void printBook( struct Books *book );
+   int main( )
+   {
+      struct Books Book1;        /* 声明 Book1,类型为 Books */
+      struct Books Book2;        /* 声明 Book2,类型为 Books */
+    
+      /* Book1 详述 */
+      strcpy( Book1.title, "C Programming");
+      strcpy( Book1.author, "Nuha Ali"); 
+      strcpy( Book1.subject, "C Programming Tutorial");
+      Book1.book_id = 6495407;
+    
+      /* Book2 详述 */
+      strcpy( Book2.title, "Telecom Billing");
+      strcpy( Book2.author, "Zara Ali");
+      strcpy( Book2.subject, "Telecom Billing Tutorial");
+      Book2.book_id = 6495700;
+    
+      /* 通过传 Book1 的地址来输出 Book1 信息 */
+      printBook( &Book1 );
+    
+      /* 通过传 Book2 的地址来输出 Book2 信息 */
+      printBook( &Book2 );
+    
+      return 0;
+   }
+   void printBook( struct Books *book )
+   {
+      printf( "Book title : %s\n", book->title);
+      printf( "Book author : %s\n", book->author);
+      printf( "Book subject : %s\n", book->subject);
+      printf( "Book book_id : %d\n", book->book_id);
+   }
+
+8.6.结构体数组
+^^^^^^^^^^^^^^
+
+8.6.1.定义结构体数组
+                    
+
+.. code c
+
+   #include <string.h>
+   #include <stdio.h>
+
+   struct Person
+   {
+       char name[20];
+       int count;
+   } leader[3] = {"Li",0,"Zhang",0,"Sun",0};
+
+   int main()
+   {
+       int i,j;
+       char leader_name[20];
+       for(i=1;i<=10;i++)
+       {
+           scanf("%s",leader_name);
+           for(j=0;j<3;j++)
+           {
+               if(strcmp(leader_name,leader[j].name)==0)
+               {
+                   leader[j].count++;
+               }
+           }
+       }
+       printf("\nResult:\n");
+       
+       for(i=0;i<3;i++)
+       {
+           printf("%5s:%d\n",leader[i].name,leader[i].count);
+           return 0;
+       }
+   }
+
+8.7共用体
+^^^^^^^^^

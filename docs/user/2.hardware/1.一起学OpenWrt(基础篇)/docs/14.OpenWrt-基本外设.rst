@@ -1,0 +1,175 @@
+14.OpenWrt-基本外设
+===========================================================
+
+OpenWrt最常用的外设,GPIO、串口等.
+
+14.1 GPIO操作
+-----------------------------------------------------------
+
+OpenWrt开发板中有多个IO可以作为GPIO,以网口状态灯为例,如何使用GPIO控制LED的亮和灭.
+
+如果GPIO没有被申请过可以通过export的方式申请,OpenWrt开发板上可以的LED有
+
+.. csv-table:: 网络状态IO
+  :align: center
+  :header: Pin Name, 默认功能, 复用功能
+  :widths: 15, 30, 15
+  
+    EPHY_LED4_N_JTRST_N, GPIO#39,  EPHY_LED4_N
+    EPHY_LED3_N_JTCLK,   GPIO#40,  EPHY_LED3_N
+    EPHY_LED2_N_JTMS,    GPIO#41,  EPHY_LED2_N
+    EPHY_LED1_N_JTDI,    GPIO#42,  EPHY_LED1_N
+    EPHY_LED1_N_JTDI,    GPIO#42,  EPHY_LED1_N
+    WLED_N,              GPIO#44,  WLED_N
+
+
+14.1.1 申请GPIO资源
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: shell 
+   :caption: 申请GPIO资源
+   :linenos:
+
+   echo 39 > /sys/class/gpio/export
+   cat /sys/kernel/debug/gpio
+
+14.1.2 设置GPIO方向
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: shell
+   :caption: 申请GPIO资源
+   :linenos:
+
+   echo out > direction
+   echo in > direction
+
+14.1.3 设置GPIO输出电平
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: shell
+   :caption: 申请GPIO资源
+   :linenos:
+
+   echo 0 > value
+   echo 1 > value
+
+14.1.4 读取GPIO输如电平
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: shell
+   :caption: 申请GPIO资源
+   :linenos:
+
+   cat value
+
+.. code-block:: shell
+   :caption: ifconfig
+   :linenos:
+
+
+    echo 1 > /sys/class/leds/green:wan/brightness
+    echo 0 > /sys/class/leds/green:wan/brightness
+
+    echo 1 > /sys/class/leds/green:lan1/brightness
+    echo 0 > /sys/class/leds/green:lan1/brightness
+
+    echo 1 > /sys/class/leds/green:lan2/brightness
+    echo 0 > /sys/class/leds/green:lan2/brightness
+
+    echo 1 > /sys/class/leds/green:lan3/brightness
+    echo 0 > /sys/class/leds/green:lan3/brightness
+
+    echo 1 > /sys/class/leds/green:lan4/brightness
+    echo 0 > /sys/class/leds/green:lan4/brightness
+
+    echo 1 > /sys/class/leds/green:wlan/brightness
+    echo 0 > /sys/class/leds/green:wlan/brightness
+
+14.2 LED作为网口状态灯
+-----------------------------------------------------------
+
+.. code-block:: shell
+   :caption: ifconfig
+   :linenos:
+
+    /etc/config/system
+    /etc/init.d/led restart
+
+    config led 'led_lan1'
+            option name 'lan1'
+            option sysfs 'green:lan1'
+            option trigger 'switch0'
+            option port_mask '0x1'
+
+    config led 'led_lan2'
+            option name 'lan2'
+            option sysfs 'green:lan2'
+            option trigger 'switch0'
+            option port_mask '0x2'
+
+    config led 'led_lan3'
+            option name 'lan3'
+            option sysfs 'green:lan3'
+            option trigger 'switch0'
+            option port_mask '0x4'
+
+    config led 'led_lan4'
+            option name 'lan4'
+            option sysfs 'green:lan4'
+            option trigger 'switch0'
+            option port_mask '0x8'
+
+    config led 'led_wan'
+            option name 'wan'
+            option sysfs 'green:wan'
+            option trigger 'switch0'
+            option port_mask '0x10'
+
+    config led 'led_wlan'
+            option name 'wlan'
+            option sysfs 'green:wlan'
+            option trigger 'phy0tpt'
+
+
+14.3 UART串口
+-----------------------------------------------------------
+
+.. csv-table:: 网络状态IO
+  :align: center
+  :header: I/O Pad Group , Normal Mode , GPIO Mode
+  :widths: 15, 30, 15
+  
+    UART1, UART_RXD1, GPIO#46
+    UART1, UART_TXD1, GPIO#45
+    UART2, MDI_TN_P2, GPIO#21
+    UART2, MDI_TP_P2, GPIO#20
+    UART0, UART_RXD0, GPIO#13
+    UART0, UART_TXD0, GPIO#12
+
+.. code-block:: shell
+   :caption: 串口常用命令
+   :linenos:
+   
+   # 串口配置
+   stty -F /dev/ttyS1 speed 115200 -echo
+   # 发送数据
+   echo -en "AT\r\n" > /dev/ttyS1
+   # 实时监控接收数据
+   cat /dev/ttyS1&
+
+14.4 I2C总线
+-----------------------------------------------------------
+
+.. code-block:: shell
+   :caption: i2c常用命令
+   :linenos:
+
+   # 列出全部i2c总线
+   i2cdetect -l
+   # 查看i2c 0的总线全部功能
+   i2cdetect -F 0
+   # 0号总线上挂载设备
+   i2cdetect -y 0
+   # 查看已经被内核驱动的i2c设备
+   ls /sys/bus/i2c/devices
+

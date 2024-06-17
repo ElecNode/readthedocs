@@ -1,0 +1,80 @@
+07.OpenWrt-系统定制化
+===========================================================
+
+学完了这么多你一定想更加深入的定制属于自己的固件,使用自己个性化的logo等,如下说明如何跟换banner、主机名称等.
+
+7.1 修改banner
+-----------------------------------------------------------
+
+.. code-block:: console 
+   :caption: banner标识
+   :linenos:
+
+    _______                     ________        __
+    |       |.-----.-----.-----.|  |  |  |.----.|  |_
+    |   -   ||  _  |  -__|     ||  |  |  ||   _||   _|
+    |_______||   __|_____|__|__||________||__|  |____|
+            |__| W I R E L E S S   F R E E D O M
+   -----------------------------------------------------
+   OpenWrt SNAPSHOT, r0-fbc2f5e
+   -----------------------------------------------------
+
+banner是shell开始时打印的标识,可以通过如下网站生成个性的字体.
+
+`banner生成网站 <http://www.network-science.de/ascii/>`_
+
+使用vi /etc/banner,删除原有的内容,增加从网站上拷贝来的新banner.
+
+.. code-block:: console 
+   :caption: 查看banner
+   :linenos:
+
+   root@OpenWrt:/# cat /etc/banner
+   ___________                   __          __
+   \__    ___/___   ____   _____/  |_  ____ |  | __
+     |    | /  _ \ / ___\_/ __ \   __\/ __ \|  |/ /
+     |    |(  <_> ) /_/  >  ___/|  | \  ___/|    <
+     |____| \____/\___  / \___  >__|  \___  >__|_ \
+                 /_____/      \/          \/     \/
+    -----------------------------------------------------
+    OpenWrt SNAPSHOT, r0-fbc2f5e
+    -----------------------------------------------------
+
+7.2 修改主机名称
+-----------------------------------------------------------
+
+使用vi /etc/config/system,编辑system文件中的hostname字段.
+
+.. code-block:: console 
+   :caption: 查看主机名称
+   :linenos:
+
+   root@Togetek:~# cat /etc/config/system
+   config system
+           option hostname Togetek
+           option timezone CST-8
+   
+   config timeserver ntp
+           list server     0.openwrt.pool.ntp.org
+           list server     1.openwrt.pool.ntp.org
+           list server     2.openwrt.pool.ntp.org
+           list server     3.openwrt.pool.ntp.org
+           option enabled 1
+           option enable_server 0
+
+7.3 修改密码
+-----------------------------------------------------------
+
+OpenWrt也是一个多用户系统,一般登录OpenWrt使用root账户,板子初始没有设置密码,可以通过命令 ``passwd root`` 来修改root账户密码.
+
+.. code-block:: console 
+   :caption: 修改root账户密码
+   :linenos:
+
+   root@Togetek:~# passwd root
+   Changing password for root
+   New password:
+   Bad password: too short
+   Retype password:
+   Password for root changed by root
+

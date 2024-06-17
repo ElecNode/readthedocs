@@ -1,0 +1,120 @@
+16.OpenWrt-u盘和tf卡挂载
+===========================================================
+
+OpenWrt 开发板可以外接U盘和TF卡等大容量存储设备,其中 MT7628an 芯片的SD接口被网口占用,TF卡功能在硬件上则通过SD接口转为USB接口实现,相当于在板子上集成了一个 ``TF卡读卡器`` ,在系统上识别到的U盘和TF卡没有太大差别,都是走的USB协议,支持 EXT4 和 NTFS 格式等文件格式.
+
+16.1 U盘挂载
+-----------------------------------------------------------
+
+16.1.1 U盘手动挂载
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+OpenWrt 开发板拥有一路USB接口,实际上板子接了不止一个USB外设,这是因为使用了 ``USB拓展坞`` .
+
+.. code-block:: console
+   :caption: fdisk -l命令,查看可用存储设备
+   :linenos:
+
+   root@OpenWrt:/# fdisk -l
+   Disk /dev/sda: 7633 MB, 8004304896 bytes, 15633408 sectors
+   973 cylinders, 255 heads, 63 sectors/track
+   Units: sectors of 1 * 512 = 512 bytes
+
+   Device  Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size Id Type
+   /dev/sda1 *  0,32,33     972,254,63        2048   15632383   15630336 7632M  c Win95 FAT32 (LBA)
+   Partition 1 has different physical/logical end:
+   phys=(972,254,63) logical=(973,18,5)
+
+.. code-block:: shell
+   :caption: U盘手动挂载
+   :linenos:
+   
+.. prompt:: bash
+
+   mount /dev/sda1 /mnt
+
+.. code-block:: shell
+   :caption: df -h
+   :linenos:
+
+   root@OpenWrt:/mnt# df -h
+   Filesystem                Size      Used Available Use% Mounted on
+   /dev/root                 5.8M      5.8M         0 100% /rom
+   tmpfs                    28.1M    180.0K     27.9M   1% /tmp
+   /dev/mtdblock6            8.0M    364.0K      7.6M   4% /overlay
+   overlayfs:/overlay        8.0M    364.0K      7.6M   4% /
+   tmpfs                   512.0K         0    512.0K   0% /dev
+   /dev/sda1                14.8G     40.8M     14.8G   0% /mnt
+
+16.1.2 U盘自动挂载
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: shell
+   :caption: U盘自动挂载
+   :linenos:
+
+   block detect > /etc/config/fstab
+
+.. code-block:: shell
+   :caption: 使能自动挂载
+   :linenos:
+
+   config 'mount'
+           option  target  '/mnt/sda1'
+           option  uuid    'B2BE6E9BBE6E57BD'
+           option  enabled '1'
+
+16.2 TF卡
+-----------------------------------------------------------
+
+16.2.1 TF卡手动挂载
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: shell
+   :caption: fdisk -l
+   :linenos:
+
+   root@OpenWrt:/mnt# fdisk -l
+   Disk /dev/sda: 15 GB, 15931539456 bytes, 31116288 sectors
+   1936 cylinders, 255 heads, 63 sectors/track
+   Units: sectors of 1 * 512 = 512 bytes
+
+   Device  Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size Id Type
+   /dev/sda1    0,130,3     1023,254,63       8192   31116287   31108096 14.8G  7 HPFS/NTFS
+
+.. code-block:: shell
+   :caption: TF卡手动挂载
+   :linenos:
+   
+   mount /dev/sda1 /mnt
+
+.. code-block:: shell
+   :caption: df -h
+   :linenos:
+
+   root@OpenWrt:/mnt# df -h
+   Filesystem                Size      Used Available Use% Mounted on
+   /dev/root                 5.8M      5.8M         0 100% /rom
+   tmpfs                    28.1M    180.0K     27.9M   1% /tmp
+   /dev/mtdblock6            8.0M    364.0K      7.6M   4% /overlay
+   overlayfs:/overlay        8.0M    364.0K      7.6M   4% /
+   tmpfs                   512.0K         0    512.0K   0% /dev
+   /dev/sda1                14.8G     40.8M     14.8G   0% /mnt
+
+16.2.2 TF卡自动挂载
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: shell
+   :caption: TF卡自动挂载
+   :linenos:
+
+   block detect > /etc/config/fstab
+
+.. code-block:: shell
+   :caption: 使能自动挂载
+   :linenos:
+
+   config 'mount'
+           option  target  '/mnt/sda1'
+           option  uuid    'B2BE6E9BBE6E57BD'
+           option  enabled '1'

@@ -1,0 +1,803 @@
+11.文件IO
+================================
+
+使用电脑必然会听到的一个名词“文件”,比如做好的PPT文件,拷贝到U盘随时可以用于分享。再比如从QQ官网下载的QQ安装包文件,当双击运行的时候就会自动执行安装脚本。计算机中数据以文件为单位进行存储,本质上来说 ``文件就是存储在磁盘上的数据集合`` 。
+
+在Linux系统中有 ``一切皆文件`` 的说法,一切外设都当做文件来处理,与主机相连的输入和输出设备当做一个文件,例如键盘就是输入文件,显示屏就是输出文件。
+
+10.1.文件指针
+-------------------------------
+
+我们可能都遇到过这种情况,正在编辑的文档由于没有及时保存,电脑突然死机导致改动的内容全部丢失。这是由于系统使用 ``缓冲区文件系统`` 机制,程序需要读取磁盘中的文件时,先将文件读取到内存的缓冲区中,然后通过缓冲区来读文件,反之亦然。编辑的文件是保存在缓冲区,只有点击“保存”按钮才会写到磁盘。内存缓冲区是掉电丢失的,而磁盘是掉电不丢失的。
+
+每个被使用的文件都在内存中开辟一个相应的文件信息区,用来存放文件的有关信息(如文件的名字、文件状态及文件当前位置等)。这些信息是保存在一个结构体变量中的。该结构体类型是由系统声明的,取名为FILE。使用FILE声明的指针变量被称为 ``文件指针`` 。
+
+.. code-block:: c
+   :caption: fopen函数打开文件
+   :linenos:
+
+    typedef struct {
+        short level;                //缓冲区“满”或“空”的程度
+        unsigned flags;             //文件状态标志
+        char fd;                    //文件描述符
+        unsigned char hold;         //如缓冲区无内容不读取字符
+        short bsize;                //缓冲区的大小
+        unsigned char* buffer;      //数据缓冲区的位置
+        unsigned char* curp;        //指针当前的指向
+        unsigned istemp;            //临时文件指示器
+        short token;                //用于有效性检查
+    }FILE;
+
+10.2.文件的打开
+-------------------------------
+
+在读写一个文件之前,必须通过库函数fopen()打开该文件。fopen()实现文件名与操作系统进行某些必要的连接和通信,并返回一个随后可以用于文件读写操作的指针。
+
+.. code-block:: c
+   :caption: fopen函数打开文件
+   :linenos:
+
+   FILE *fopen(char *pname,char *mode);
+
+
+功能说明:ANSI C规定的标准输出输入函数fopen()来实现打开文件。FILE \*指出fopen()是一个返回文件类型的指针函数,按照mode规定的方式,打开由pname指定的文件。若找不到由pname指定的相应文件,如果按写方式打开文件,就按由pname指定的名字建立一个新文件,如果按读方式打开文件,就会产生一个错误。 
+
+参数说明:pname是一个字符指针,它将指向要打开或建立的文件的文件名字符串。mode是一个指向文件处理方式字符串的字符指针。 
+
+返回值:正常返回:被打开文件的文件指针,异常返回:NULL,表示打开操作不成功
+
+============ ====================================================================================================
+ 模式(mode)   描述
+============ ====================================================================================================
+ “r”          打开一个用于读取的文件。该文件必须存在。
+ “w”          创建一个用于写入的空文件。如果文件名称与已存在的文件相同,则会删除已有文件的内容,文件被视为一个新的空文件。
+ “a”          追加到一个文件。写操作向文件末尾追加数据。如果文件不存在,则创建文件。 |
+ “r+”         打开一个用于更新的文件,可读取也可写入。该文件必须存在。
+ “w+”         创建一个用于读写的空文件。
+ “a+”         打开一个用于读取和追加的文件。
+============ ====================================================================================================
+
+.. code-block:: c
+   :caption: fopen函数实例
+   :linenos:
+
+    FILE *fp;
+    if((fp=fopen("test","r")) == NULL)
+    {
+        printf("The file can not be opened.\n");
+        exit(1);
+    }
+
+10.3.文件的关闭
+-------------------------------------
+
+.. code-block:: c
+   :caption: fclose函数关闭文件
+   :linenos:
+
+   int fclose(FILE *fp);
+
+功能说明:关闭由fp指出的文件。此时调用操作系统提供的文件关闭功能,关闭由fp->fd指出的文件;释放由fp指出的文件类型结构体变量;返回操作结果,即0或EOF。
+参数说明:fp一个已打开文件的文件指针。
+返回值:正常返回0,异常返回EOF表示文件在关闭时发生错误。
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   int n=fclose(fp);
+
+10.4.文件的读写操作
+-----------------------------------
+
+10.4.1.从文件中读取一个字符
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   int fgetc(FILE *fp);
+
+功能说明:从fp所指文件中读取一个字符。
+参数说明:fp这是个文件指针,它指出要从中读取字符的文件。
+返回值:正常返回读取字符的代码,非正常返回EOF。例如,要从"写打开"文件中读取一个字符时,会发生错误而返回一个EOF。
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fgetc从文件中读取字符
+   * @author     单片机设计电子网
+   **************************************************************/
+
+   #include <stdio.h>
+   void main(int argc,char *argv[])                                 //命令行参数
+   {
+       int ch;                                                      //定义文件类型指针
+       FILE *fp;                                                    //判断命令行是否正确
+       if(argc!=2)
+       {
+           printf("Error format,Usage: display filename1\n");
+           return;                                                  //键入了错误的命令行,结束程序的执行
+       }
+       //按读方式打开由argv[1]指出的文件
+       if((fp=fopen(argv[1],"r"))==NULL)
+       {
+           printf("The file <%s> can not be opened.\n",argv[1]);    //打开操作不成功
+           return;                                                  //结束程序的执行
+       }
+       //成功打开了argv[1]所指文件
+       ch=fgetc(fp);                                                //从fp所指文件的当前指针位置读取一个字符
+       while(ch!=EOF)                                               //判断刚读取的字符是否是文件结束符
+       {
+           putchar(ch);                                             //若不是结束符,将它输出到屏幕上显示
+           ch=fgetc(fp);                                            //继续从fp所指文件中读取下一个字符
+       }                                                            //完成将fp所指文件的内容输出到屏幕上显示
+       fclose(fp);                                                  //关闭fp所指文件
+   }
+
+10.4.2.写一个字符到文件中去
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fputc写一个字符到文件
+   :linenos:
+
+   int fputc(int ch,FILE *fp);
+
+功能说明:把ch中的字符写入由fp指出的文件中去。
+参数说明:ch是一个整型变量,内存要写到文件中的字符(C语言中整型量和字符量可以通用)。fp这是个文件指针,指出要在其中写入字符的文件。
+返回值:正常返回要写入字符的代码。非正常返回EOF。例如,要往"读打开"文件中写一个字符时,会发生错误而返回一个EOF。
+
+.. code-block:: c
+   :caption: fputc写一个字符到文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fputc写一个字符到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+
+   #include <stdio.h>
+   void main(int argc,char *argv[])                                             //命令行参数
+   {
+       int ch;
+       FILE *in,*out;                                                           //定义in和out两个文件类型指针
+       if(argc!=3) //判断命令行是否正确
+       {
+           printf("Error in format,Usage: copyfile filename1 filename2\n");
+           return; //命令行错,结束程序的执行
+       }
+       //按读方式打开由argv[1]指出的文件
+       if((in=fopen(argv[1],"r"))==NULL)
+       {
+           printf("The file <%s> can not be opened.\n",argv[1]);
+           return; //打开失败,结束程序的执行
+       }
+       //成功打开了argv[1]所指文件,再
+       //按写方式打开由argv[2]指出的文件
+       if((out=fopen(argv[2],"w"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[2]);
+           return; //打开失败,结束程序的执行
+       }
+       //成功打开了argv[2]所指文件
+       ch=fgetc(in); //从in所指文件的当前指针位置读取一个字符
+       while(ch!=EOF) //判断刚读取的字符是否是文件结束符
+       {
+           fputc(ch,out); //若不是结束符,将它写入out所指文件
+           ch=fgetc(in); //继续从in所指文件中读取下一个字符
+       } //完成将in所指文件的内容写入(复制)到out所指文件中
+       fclose(in);  //关闭in所指文件
+       fclose(out); //关闭out所指文件
+   }
+
+.. code-block:: c
+   :caption: fputc写一个字符到文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fputc写一个字符到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+
+   #include <stdio.h>
+   void main(int argc,char *argv[])
+   {
+       char str[9];
+       int ch,count,i;
+       FILE *fp;
+       if(argc!=2)
+       {
+           printf("Error format,Usage: dumpf filename\n");
+           return;
+       }
+       if((fp=fopen(argv[1],"r"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[1]);
+           return;
+       }
+       count=0;
+       do{
+           i=0;
+           //按八进制输出第一列,作为一行八个字节的首地址
+           printf("%06o: ",count*8);
+           do{
+               // 从打开的文件中读取一个字符
+               ch=fgetc(fp);
+               // 按十进制方式输出这个字符的ASCII码
+               printf("%4d",ch);
+               // 如果是不可示字符就用"#"字符代替
+               if(ch<' '||ch>'~') str[i]='#';
+               // 如果是可示字符,就将它存入数组str以便形成字符串
+               else str[i]=ch;
+               // 保证每一行输出八个字符
+               if(++i==8) break;
+           }while(ch!=EOF); // 遇到文件尾标志,结束读文件操作
+           str[i]='\0'; // 在数组str加字符串结束标志
+           for(;i<8;i++) printf(" "); // 一行不足八个字符用空格填充
+           printf(" %s\n",str); // 输出字符串
+           count++; // 准备输出下一行
+       }while(ch!=EOF); // 直到文件结束
+       fclose(fp); // 关闭fp所指文件
+   }
+
+10.4.3.从文件中读取一个字符串
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   char *fgets(char *str,int n,FILE *fp);
+
+
+功能说明:从由fp指出的文件中读取n-1个字符,并把它们存放到由str指出的字符数组中去,最后加上一个字符串结束符'\0'。
+参数说明:str:接收字符串的内存地址,可以是数组名,也可以是指针,n: 指出要读取字符的个数。,fp:这是个文件指针,指出要从中读取字符的文件。
+返回值:正常返回字符串的内存首地址,即str的值。非正常返回一个NULL值,此时应当用feof()或ferror()函数来判别是读取到了文件尾,还是发生了错误。例如,要从"写打开"文件中读取字符串,将发生错误而返回一个NULL值。
+
+10.4.4.写一个字符串到文件中去
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fputs写一个字符串到文件实例
+   :linenos:
+
+    int fputs(char *str,FILE *fp);
+
+
+功能说明:把由str指出的字符串写入到fp所指的文件中去。
+参数说明:str指出要写到文件中去的字符串。fp这是个文件指针,指出字符串要写入其中的文件。
+返回值:正常返写入文件的字符个数,即字符串的长度。非正常返回一个NULL值,此时应当用feof()或ferror()函数来判别是读取到了文件尾,还是发生了错误。例如,要往一个"读打开" 文件中写字符串时,会发生错误而返回一个NULL值。
+
+.. code-block:: c
+   :caption: fputs写一个字符串到文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fputs写一个字符串到文件实例
+   * @author     单片机设计电子网
+   **************************************************************/
+   #include <stdio.h>
+   #define SIZE 512
+   void main(int argc,char *argv[])
+   {
+       char buffer[SIZE];
+       FILE *fp1,*fp2;
+       if(argc!=3)
+       {
+           printf("Usage: linkfile filename1 filename2\n");
+           return;
+       }
+       // 按追加方式打开argv[1] 所指文件
+       if((fp1=fopen(argv[1],"a"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[1]);
+           return;
+       }
+       if((fp2=fopen(argv[2],"r"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[2]);
+           return;
+       }
+       // 读入一行立即写出,直到文件结束
+       while(fgets(buffer,SIZE,fp1)!=NULL)
+           printf("%s\n",buffer);
+       while(fgets(buffer,SIZE,fp2)!=NULL)
+           fputs(buffer,fp1);
+       fclose(fp1);
+       fclose(fp2);
+       if((fp1=fopen(argv[1],"r"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[1]);
+           return;
+       }
+       while(fgets(buffer,SIZE,fp1)!=NULL)
+           printf("%s\n",buffer);
+       fclose(fp1);
+   }
+
+10.4.5.往文件中写格式化数据
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fprintf往文件中写格式化数据
+   :linenos:
+
+    int fprintf(FILE *fp,char *format,arg_list)
+
+功能说明:将变量表列(arg_list)中的数据,按照format指出的格式,写入由fp指定的文件。fprintf()函数与printf()函数的功能相同,只是printf()函数是将数据写入屏幕文件(stdout)。
+参数说明:fp这是个文件指针,指出要将数据写入的文件,format这是个指向字符串的字符指针,字符串中含有要写出数据的格式,所以该字符串成为格式串。格式串描述的规则与printf()函数中的格式串相同,arg_list:是要写入文件的变量表列,各变量之间用逗号分隔。
+返回值:无
+
+.. code-block:: c
+   :caption: fprintf往文件中写格式化数据实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fprintf往文件中写格式化数据
+   * @author     单片机设计电子网
+   **************************************************************/
+
+   #include <stdio.h>
+   void main()
+   {
+       char name[10];
+       int nAge,nClass;
+       long number;
+       FILE *fp;
+       if((fp=fopen("student.txt","w"))==NULL)
+       {
+           printf("The file %s can not be opened.\n","student.txt");
+           return;
+       }
+       fscanf(stdin,"%s %d %d %ld",name,&nClass,&nAge,&number);
+       fprintf(fp,"%s %5d %4d %8ld",name,nClass,nAge,number);
+       fclose(fp);
+       if((fp=fopen("student.txt","r"))==NULL)
+       {
+           printf("The file %s can not be opened.\n","student.txt");
+           return;
+       }
+       fscanf(fp,"%s %d %d %ld",name,&nClass,&nAge,&number);
+       printf("name nClass nAge number\n");
+       fprintf(stdout,"%-10s%-8d%-6d%-8ld\n",name,nClass,nAge,number);
+       fclose(fp);
+   }
+
+10.4.6.以二进制形式读取文件中的数据
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fread二进制形式读取文件中的数据
+   :linenos:
+
+    int fread(void *buffer,unsigned sife,unsigned count,FILE *fp)
+
+功能说明:从由fp指定的文件中,按二进制形式将sife*count个数据读到由buffer指出的数据区中。
+参数说明buffer:这是一个void型指针,指出要将读入数据存放在其中的存储区首地址。sife:指出一个数据块的字节数,即一个数据块的大小尺寸。count:指出一次读入多少个数据块(sife)。fp:这是个文件指针,指出要从其中读出数据的文件。
+返回值:正常返回实际读取数据块的个数,即count。异常返回:如果文件中剩下的数据块个数少于参数中count指出的个数,或者发生了错误,返回0值。此时可以用feof()和ferror()来判定到底出现了什么情况。
+
+10.4.7.以二进制形式写数据到文件中去
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fwrite二进制形式写数据到文件
+   :linenos:
+
+    int fwrite(void *buffer,unsigned sife,unsigned count,FILE *fp)
+
+功能说明:按二进制形式,将由buffer指定的数据缓冲区内的sife*count个数据写入由fp指定的文件中去。
+参数说明:buffer:这是一个void型指针,指出要将其中数据输出到文件的缓冲区首地址,sife:指出一个数据块的字节数,即一个数据块的大小尺寸,count:一次输出多少个数据块(sife),fp:这是个文件指针,指出要从其中读出数据的文件。
+返回值:正常返回实际输出数据块的个数,即count。异常返回0值,表示输出结束或发生了错误。
+
+.. code-block:: c
+   :caption: fwrite二进制形式写数据到文件
+   :linenos:
+
+   /***************************************************************
+   * @brief      fwrite二进制形式写数据到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+   #include <stdio.h>
+   #define SIZE 4
+   struct worker
+   { 
+    int number;
+    char name[20];
+    int age;
+   };
+   void main()
+   {
+       struct worker wk;
+       int n;
+       FILE *in,*out;
+       if((in=fopen("file1.txt","rb"))==NULL)
+       {
+           printf("The file %s can not be opened.\n","file1.txt");
+           return;
+       }
+       if((out=fopen("file2.txt","wb"))==NULL)
+       {
+           printf("The file %s can not be opened.\n","file2.txt");
+           return;
+       }
+       while(fread(&wk,sizeof(struct worker),1,in)==1)
+           fwrite(&wk,sizeof(struct worker),1,out);
+       fclose(in);
+       fclose(out);
+   }
+
+10.4.8.以二进制形式读取一个整数
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   int getw(FILE *fp);
+
+功能说明:从由fp指定的文件中,以二进制形式读取一个整数。
+参数说明:fp是文件指针。
+返回值:正常返回所读取整数的值,异常返回EOF,即-1。由于读取的整数值有可能是-1,所以必须用feof()或ferror()来判断是到了文件结束,还是出现了一个出错。
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fwrite二进制形式写数据到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+   #include <stdio.h>
+   void main(int argc,char *argv[])
+   {
+       int i,sum=0;
+       FILE *fp;
+       if(argc!=2)
+       {
+           printf("Command error,Usage: readfile filename\n");
+           exit(1);
+       }
+       if(!(fp=fopen(argv[1],"rb")))
+       {
+           printf("The file %s can not be opened.\n",argv[1]);
+           exit(1);
+       }
+       for(i=1;i<=10;i++) sum+=getw(fp);
+       printf("The sum is %d\n",sum);
+       fclose(fp);
+   }
+
+10.4.9.以二进制形式存贮一个整数
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   int putw(int n,FILE *fp);
+
+
+
+功能说明:以二进制形式把由变量n指出的整数值存放到由fp指定的文件中。
+参数说明:n:要存入文件的整数,fp:是文件指针。
+返回值:正常返回:所输出的整数值,异常返回:返回EOF,即-1。由于输出的整数值有可能是-1,所以必须用feof()或ferror()来判断是到了文件结束,还是出现了一个出错。
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fwrite二进制形式写数据到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+   #include <stdio.h>
+   void main(int argc,char *argv[])
+   {
+       int i;
+       FILE *fp;
+       if(argc!=2)
+       {
+           printf("Command error,Usage: writefile filename\n");
+           return;
+       }
+
+       if(!(fp=fopen(argv[1],"wb")))
+       {
+           printf("The file %s can not be opened.\n",argv[1]);
+           return;
+       }
+       for(i=1;i<=10;i++) printf("%d\n", putw(i,fp));
+       fclose(fp);
+   }
+
+10.5.文件状态检查
+-----------------------------------
+
+10.5.1.文件结束
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   int feof(FILE *fp);
+
+功能说明:该函数用来判断文件是否结束。
+参数说明:fp:文件指针。
+返回值:0假值,表示文件未结束,1真值,表示文件结束。
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fwrite二进制形式写数据到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+   #include <stdio.h>
+   void main(int argc,char *argv[])
+   {
+       FILE *in,*out;
+       char ch;
+       if(argc!=3)
+       {
+           printf("Usage: copyfile filename1 filename2\n");
+           return;
+       }
+       if((in=fopen(argv[1],"rb"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[1]);
+           return;
+       }
+       if((out=fopen(argv[2],"wb"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[2]);
+           return;
+       }
+       while(!feof(in))
+       {
+           ch=fgetc(in);
+           if(ferror(in))
+           {
+               printf("read error!\n");
+               clearerr(in);
+           }
+           else
+           {
+               fputc(ch,out);
+               if(ferror(out))
+               {
+                   printf("write error!\n");
+                   clearerr(out);
+               }
+           }
+       }
+       fclose(in);
+       fclose(out);
+   }
+
+10.5.2.文件读/写出错
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   int ferror(FILE *fp);
+
+功能说明:检查由fp指定的文件在读写时是否出错。
+参数说明:fp文件指针。
+返回值:0假值,表示无错误,1真值,表示出错。
+
+10.5.3.清除文件错误标志
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   void clearerr(FILE *fp);
+
+功能说明:清除由fp指定文件的错误标志。
+参数说明:fp文件指针。
+返回值:无。
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fwrite二进制形式写数据到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+   #include <stdio.h>
+   void main(int argc,char *argv[])
+   {
+       FILE *in,*out;
+       char ch;
+       if(argc!=3)
+       {
+           printf("Usage: copyfile filename1 filename2\n");
+           return;
+       }
+       if((in=fopen(argv[1],"rb"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[1]);
+           return;
+       }
+       if((out=fopen(argv[2],"wb"))==NULL)
+       {
+           printf("The file %s can not be opened.\n",argv[2]);
+           return;
+       }
+       while(!feof(in))
+       {
+           ch=fgetc(in);
+           if(ferror(in))
+           {
+               printf("read error!\n");
+               clearerr(in);
+           }
+           else
+           {
+               fputc(ch,out);
+               if(ferror(out))
+               {
+                   printf("write error!\n");
+                   clearerr(out);
+               }
+           }
+       }
+       fclose(in);
+       fclose(out);
+   }
+
+10.5.4.了解文件指针的当前位置
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   long ftell(FILE *fp);
+
+功能说明:取得由fp指定文件的当前读/写位置,该位置值用相对于文件开头的位移量来表示。
+参数说明:fp:文件指针。
+返回值:正常返回:位移量(这是个长整数),异常返回:-1,表示出错。
+
+10.6. 文件定位
+--------------------------------------
+
+10.6.1.反绕
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+    void rewind(FILE *fp);
+
+功能说明:使由文件指针fp指定的文件的位置指针重新指向文件的开头位置。
+参数说明:fp,文件指针
+返回值:无。
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fwrite二进制形式写数据到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+   #include <stdio.h>
+   void main()
+   {
+       FILE *in,*out;
+       in=fopen("filename1","r");
+       out=fopen("filename2","w");
+       while(!feof(in)) fputc(fgetc(in),out);
+       rewind(out);
+       while(!feof(in)) putchar(fgetc(in));
+       fclose(in);
+       fclose(out);
+   }
+
+10.6.2.随机定位
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+    int fseek(FILE *fp,long offset,int base);
+
+功能说明:使文件指针fp移到基于base的相对位置offset处。
+参数说明:fp:文件指针:offset:相对base的字节位移量。这是个长整数,用以支持大于64KB的文件,base:文件位置指针移动的基准位置,是计算文件位置指针位移的基点。ANSI C定义了base的可能取值,以及这些取值的符号常量。
+返回值:正常返回:当前指针位置,异常返回:-1,表示定位操作出错。
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   /***************************************************************
+   * @brief      fwrite二进制形式写数据到文件
+   * @author     单片机设计电子网
+   **************************************************************/
+   #include <stdio.h>
+   #include <string.h>
+   struct std_type
+   {
+       int num;
+       char name[20];
+       int age;
+       char class;
+   }stud;
+   int cstufile()
+   {
+       int i;
+       FILE *fp;
+       if((fp=fopen("stufile","wb"))==NULL)
+       {
+           printf("The file can't be opened for write.\n");
+           return 0;
+       }
+       for(i=1;i<=100;i++)
+       {
+           stud.num=i;
+           strcpy(stud.name,"aaaa");
+           stud.age=17;
+           stud.class='8';
+           fwrite(&stud,sizeof(struct std_type),1,fp);
+       }
+       fclose(fp);
+       return 1;
+   }
+   void main()
+   {
+       int n;
+       FILE *fp;
+       if(cstufile()==0) return;
+       if((fp=fopen("stufile","rb"))==NULL)
+       {
+           printf("The file can not be opened.\n");
+           return;
+       }
+       for(n=0;n<100;n+=2)
+       {
+           fseek(fp,n*sizeof(struct std_type),SEEK_SET);
+           fread(&stud,sizeof(struct std_type),1,fp);
+           printf("%10d%20s%10d%4c\n",stud.num,stud.name,stud.age,stud.class);
+       }
+       fclose(fp);
+   }
+
+10.7.关于exit()函数
+-----------------------------------
+
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   void exit(int status);
+
+功能说明:exit()函数使程序立即终止执行,同时将缓冲区中剩余的数据输出并关闭所有已经打开的文件。
+参数说明:status为0值表示程序正常终止,为非0值表示一个定义错误。
+返回值:无
+
+10.8.关于feof()函数
+-----------------------------------
+
+.. code-block:: c
+   :caption: fclose函数关闭文件实例
+   :linenos:
+
+   int feof(FILE *fp);
+
+功能说明:在文本文件(ASCII文件)中可以用值为-1的符号常量EOF来作为文件的结束符。但是在二进制文件中-1往往可能是一个有意义的数据,因此不能用它来作为文件的结束标志。为了能有效判别文件是否结束,ANSI C提供了标准函数feof(),用来识别文件是否结束。
+参数说明:fp文件指针。
+返回值:返回为非0值已到文件尾,返回为0值表示还未到文件尾。

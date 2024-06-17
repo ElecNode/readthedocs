@@ -1,0 +1,23 @@
+18.OpenWrt-搭建nas文件服务器
+===========================================================
+
+18.1. windows samba文件共享
+-----------------------------------------------------------
+
+.. code-block:: shell
+   :caption: samba文件共享
+   :linenos:
+
+
+   # 修改密码
+   smbpassword -a root
+   smbpasswd -a root
+
+   # 重启服务
+   /etc/init.d/samba restart
+
+   /etc/init.d/samba restart     #重启Samba服务
+   /etc/init.d/samba enable     #允许开机自启动
+
+18.2. ftp文件共享
+-----------------------------------------------------------

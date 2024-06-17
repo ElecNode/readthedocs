@@ -1,0 +1,188 @@
+5.循环结构
+===========================================================
+
+有时候在编写程序时需要重复做一件事情,当然可以把需要重复做的事都逐个写出来,但这样写会使程序变的臃肿.而且有时候需要重复做的事情在满足了某种情况后就停止了,转而去做其他的事情,并不一定需要把循环执行完.C语言使用for关键字来实现循环,并搭配if条件判断和break关键字实现循环跳出.
+
+4.2.循环结构
+-----------------------------------------------------------
+
+C语言中有3种方式实现循环语句.
+
+4.2.1.while语句
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+   while语句中只要表达式的值为真,则执行循环体,直到表达式为假.
+
+.. code-block:: c
+   :caption: printf函数使用举例
+   :linenos:
+
+   while (表达式)
+   {
+       //循环体
+   }
+
+
+4.2.2.do-while语句
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+4.2.3.for语句
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+C语言中第3种实现循环结构的是for语句,相比较于while和do-while语句,for循环更加简洁、灵活.
+
+.. code-block:: c
+   :caption: printf函数使用举例
+   :linenos:
+
+   for(表达式1;表达式2;表达式3)
+   {
+   //循环体
+   }
+
+
+
+实现一个火箭发射10秒倒计时的函数.
+
+.. code-block:: c
+   :caption: printf函数使用举例
+   :linenos:
+
+   #include <stdio.h>
+
+   int main(void)
+   {
+       for(int i=1;i<=10;i++)
+       {
+           printf("%d\n",i);
+       }
+       printf("点火");
+       return 0;
+   }
+
+问题:实现判断一个数是不是素数?
+
+分析:素数又称质数.所谓素数是指除了1和它本身以外,不能被任何整数整除的数,反之称之为合数.0和1既不是素数也不是合数.可以用2到这个数本身一个数一个数试的方法,在这个数不是很大的情况下显然是可行的.
+
+.. code-block:: c
+   :caption: printf函数使用举例
+   :linenos:
+
+   #include <stdio.h>
+
+   int main(void)
+   {
+       printf("请输入一个整数!");
+       int num;
+       scanf("%d",&num);
+     for(int i=2;i<=num;i++)
+       {
+           if(num % i == 0)
+           {
+               printf("%d不是一个素数!\n",num);
+           }
+           else
+           {
+               printf("%d是一个素数!\n",num);
+           }
+           printf("%d\n",i);
+       }
+       return 0;
+   }
+
+
+实现乘法表打印.
+
+.. code-block:: c
+   :caption: printf函数使用举例
+   :linenos:
+
+   #include <stdio.h>
+
+   int main(void)
+   {
+     for(int i = 1;i <= 9;i++)
+       {
+           for(int j = 1;j <= i;j++)
+           {
+               printf("%d*%d=%d ",i,j,i*j);
+           }
+           printf("\n");
+       }
+       return 0;
+   }
+
+4.2.4.break语句
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   在switch语句中提到break语句,当时只知道break语句有跳出功能.下面具体来说break语句的用法.回到求一个数是不是素数的问题,for(int i=2;i<=num;i++)由于一个数不可能被大于其一半的数整除,所以在2到其值一半的数中能找到把它整除的数就是合数,可以改进为for(int i=2;i<=num/2;i++).一个数可能被多个数整除,只要找到其中一个能把它整除的数即可,而不用全部遍历.
+
+.. code-block:: c
+   :caption: printf函数使用举例
+   :linenos:
+
+   #include <stdio.h>
+
+   int main(void)
+   {
+       printf("请输入一个整数!");
+       int num;
+       scanf("%d",&num);
+     for(int i=2;i<=num/2;i++)
+       {
+           if(num % i == 0)
+           {
+               printf("%d不是一个素数!\n",num);
+         break;
+           }
+           else
+           {
+               printf("%d是一个素数!\n",num);
+           }
+           printf("%d\n",i);
+       }
+       return 0;
+   }
+
+4.2.5.continue语句
+                  
+
+前面学习了break语句,break语句用于跳出for循环,还有一种情况是跳出本轮循环,然后继续循环下一轮循环.下面引出continue语句,当满足某种条件时候,跳出本轮循环,直接执行下一轮循环.
+编写一个程序输入一串字符,忽略字符中的空格,并打印出来.
+
+.. code-block:: c
+   :caption: printf函数使用举例
+   :linenos:
+
+   #include <stdio.h>
+
+   int main()
+   {    
+       int str[20];
+       int length =0;
+       
+       printf("请输入一串字符\r\n");
+       scanf("%s",&str);
+       length = strlen(str);
+       
+       for(int i=0;i>length;i--)
+       {
+           if(str[i] == ' ')
+           {
+               continue;
+           }
+           else
+           {
+               printf("%c",str[i]);
+           }
+       }
+       return 0;
+   }
+
+
+
+4.2.6.goto语句
+
